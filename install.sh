@@ -1084,12 +1084,22 @@ configure_proxy_protocol() {
     echo ""
     read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
     if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
-        systemctl restart realm
-        if systemctl is-active --quiet realm; then
-            echo "✅ 服务重启成功，配置已生效"
+        echo "🔄 正在重启Realm服务..."
+        if systemctl restart realm 2>/dev/null; then
+            sleep 2
+            if systemctl is-active --quiet realm; then
+                echo "✅ 服务重启成功，配置已生效"
+            else
+                echo "⚠️  服务重启完成，但状态检查异常"
+                echo "💡 配置已保存，请手动检查服务状态"
+            fi
         else
-            echo "❌ 服务重启失败，请检查配置"
+            echo "❌ 服务重启失败，请检查配置文件"
+            echo "🔍 可以使用选项11查看服务状态"
         fi
+    else
+        echo "⚠️  配置已保存，但未重启服务"
+        echo "💡 请手动重启服务以应用配置"
     fi
 
     read -e -p "按回车键返回..."
@@ -1898,6 +1908,12 @@ configure_complete_ws_tunnel() {
         fake_domain="$custom_domain"
     fi
 
+    # 添加备注功能
+    read -e -p "📝 备注信息 (可选，如: 香港节点转发): " tunnel_remark
+    if [ -z "$tunnel_remark" ]; then
+        tunnel_remark="WS隧道转发"
+    fi
+
     echo ""
     echo "📋 配置摘要："
     echo "  🌐 B机器IP: $b_machine_ip"
@@ -1905,6 +1921,7 @@ configure_complete_ws_tunnel() {
     echo "  📍 A机器端口: $listen_ports"
     echo "  🔌 B机器端口: $ws_port"
     echo "  🎭 伪装域名: $fake_domain"
+    echo "  📝 备注信息: $tunnel_remark"
     echo ""
 
     read -e -p "确认配置? (Y/n): " confirm
@@ -1962,7 +1979,7 @@ EOF
 
                 cat >> "$CONFIG_FILE" << EOF
 [[endpoints]]
-# 备注: WS客户端 - 端口$port
+# 备注: $tunnel_remark - A机器端口$port
 listen = "0.0.0.0:$port"
 remote = "$b_machine_ip:$ws_port"
 transport = "ws;host=$fake_domain;path=$ws_path"
@@ -1999,7 +2016,7 @@ tcp_timeout = 10
 tcp_nodelay = true
 
 [[endpoints]]
-# 备注: WS服务端 - 转发到XrayR
+# 备注: $tunnel_remark - B机器服务端
 listen = "0.0.0.0:$ws_port"
 remote = "$target_format"
 transport = "ws;host=$fake_domain;path=/ws"
@@ -2069,6 +2086,11 @@ configure_ws_client_only() {
         ws_path="/ws"
     fi
 
+    read -e -p "📝 备注信息 (可选): " ws_remark
+    if [ -z "$ws_remark" ]; then
+        ws_remark="WS客户端"
+    fi
+
     # 验证端口号
     if ! [[ "$local_port" =~ ^[0-9]+$ ]] || [ "$local_port" -lt 1 ] || [ "$local_port" -gt 65535 ]; then
         echo "❌ 端口号无效"
@@ -2087,7 +2109,7 @@ configure_ws_client_only() {
     cat >> "$CONFIG_FILE" << EOF
 
 [[endpoints]]
-# 备注: WS客户端 - 隧道转发
+# 备注: $ws_remark
 listen = "0.0.0.0:$local_port"
 remote = "$server_ip:$server_port"
 transport = "ws;host=$fake_domain;path=$ws_path"
@@ -2142,6 +2164,11 @@ configure_ws_server_only() {
         ws_path="/ws"
     fi
 
+    read -e -p "📝 备注信息 (可选): " ws_remark
+    if [ -z "$ws_remark" ]; then
+        ws_remark="WS服务端"
+    fi
+
     # 验证端口号
     if ! [[ "$listen_port" =~ ^[0-9]+$ ]] || [ "$listen_port" -lt 1 ] || [ "$listen_port" -gt 65535 ]; then
         echo "❌ 端口号无效"
@@ -2168,7 +2195,7 @@ configure_ws_server_only() {
     cat >> "$CONFIG_FILE" << EOF
 
 [[endpoints]]
-# 备注: WS服务端 - 隧道转发
+# 备注: $ws_remark
 listen = "0.0.0.0:$listen_port"
 remote = "$target_format"
 transport = "ws;host=$fake_domain;path=$ws_path"
@@ -2298,15 +2325,24 @@ show_transport_config() {
 restart_service_prompt() {
     read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
     if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
-        systemctl restart realm
-        if systemctl is-active --quiet realm; then
-            echo "✅ 服务重启成功"
+        echo "🔄 正在重启Realm服务..."
+        if systemctl restart realm 2>/dev/null; then
+            sleep 2
+            if systemctl is-active --quiet realm; then
+                echo "✅ 服务重启成功，配置已生效"
+            else
+                echo "⚠️  服务重启完成，但状态检查异常"
+                echo "💡 配置已保存，请手动检查服务状态"
+            fi
         else
-            echo "❌ 服务重启失败，请检查配置"
+            echo "❌ 服务重启失败，请检查配置文件"
             echo ""
-            echo "错误日志："
+            echo "🔍 错误日志："
             journalctl -u realm --no-pager -l | tail -5
         fi
+    else
+        echo "⚠️  配置已保存，但未重启服务"
+        echo "💡 请手动重启服务以应用配置"
     fi
 
     read -e -p "按回车键返回..."
