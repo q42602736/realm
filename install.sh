@@ -1107,11 +1107,10 @@ configure_websocket_client() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    read -e -p "🏠 HTTP Host (如: example.com，直接IP连接可留空): " http_host
     if [ -z "$http_host" ]; then
-        echo "❌ HTTP Host不能为空"
-        read -e -p "按回车键返回..."
-        return
+        echo "⚠️  HTTP Host为空，将使用目标服务器地址"
+        http_host="$ws_server"
     fi
 
     read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
@@ -1168,11 +1167,10 @@ configure_websocket_server() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    read -e -p "🏠 HTTP Host (如: example.com，可留空使用默认值): " http_host
     if [ -z "$http_host" ]; then
-        echo "❌ HTTP Host不能为空"
-        read -e -p "按回车键返回..."
-        return
+        echo "⚠️  HTTP Host为空，将使用默认值 'localhost'"
+        http_host="localhost"
     fi
 
     read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
@@ -1508,11 +1506,10 @@ configure_wss_client() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    read -e -p "🏠 HTTP Host (如: example.com，直接IP连接可留空): " http_host
     if [ -z "$http_host" ]; then
-        echo "❌ HTTP Host不能为空"
-        read -e -p "按回车键返回..."
-        return
+        echo "⚠️  HTTP Host为空，将使用目标服务器地址"
+        http_host="$wss_server"
     fi
 
     read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
@@ -1585,11 +1582,10 @@ configure_wss_server() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    read -e -p "🏠 HTTP Host (如: example.com，可留空使用默认值): " http_host
     if [ -z "$http_host" ]; then
-        echo "❌ HTTP Host不能为空"
-        read -e -p "按回车键返回..."
-        return
+        echo "⚠️  HTTP Host为空，将使用默认值 'localhost'"
+        http_host="localhost"
     fi
 
     read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
