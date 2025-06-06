@@ -307,9 +307,13 @@ uninstall_realm() {
     echo ""
     echo "⚠️  警告：这将删除Realm及所有配置文件！"
     echo ""
-    read -e -p "确认卸载Realm? (输入 'YES' 确认): " confirm
+    echo "请选择操作："
+    echo " [1] 确认卸载"
+    echo " [0] 取消卸载"
+    echo ""
+    read -e -p "请选择 (1/0): " confirm
 
-    if [ "$confirm" = "YES" ]; then
+    if [ "$confirm" = "1" ]; then
         echo "正在卸载Realm..."
 
         # 停止并禁用服务
@@ -385,6 +389,44 @@ add_forward() {
         return
     fi
 
+    # 验证端口号格式
+    if ! [[ "$local_port" =~ ^[0-9]+$ ]] || [ "$local_port" -lt 1 ] || [ "$local_port" -gt 65535 ]; then
+        echo "❌ 端口号无效，请输入1-65535之间的数字"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 检查端口是否已被占用
+    echo "🔍 检查端口 $local_port 可用性..."
+    if netstat -tln | grep ":$local_port " >/dev/null 2>&1; then
+        echo "⚠️  警告：端口 $local_port 已被占用"
+        echo ""
+        echo "当前占用端口 $local_port 的进程："
+        netstat -tlnp | grep ":$local_port " 2>/dev/null || echo "无法获取进程信息"
+        echo ""
+        read -e -p "是否继续使用此端口? (y/N): " continue_confirm
+        if [[ ! "$continue_confirm" =~ ^[Yy]$ ]]; then
+            echo "❌ 已取消添加规则"
+            read -e -p "按回车键返回..."
+            return
+        fi
+    else
+        echo "✅ 端口 $local_port 可用"
+    fi
+
+    # 检查是否与现有规则冲突
+    if [ -f "$CONFIG_FILE" ]; then
+        if grep -q "listen = \"0.0.0.0:$local_port\"" "$CONFIG_FILE"; then
+            echo "❌ 端口 $local_port 已在Realm配置中使用"
+            echo ""
+            echo "现有规则："
+            grep -A 2 -B 1 "listen = \"0.0.0.0:$local_port\"" "$CONFIG_FILE"
+            echo ""
+            read -e -p "按回车键返回..."
+            return
+        fi
+    fi
+
     read -e -p "🌐 转发目标IP/域名: " remote_ip
     if [ -z "$remote_ip" ]; then
         echo "❌ 目标地址不能为空"
@@ -423,7 +465,7 @@ add_forward() {
     echo ""
 
     # 询问是否重启服务
-    read -e -p "是否立即重启服务以应用配置? (Y/n): " restart_confirm
+    read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
     if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
         systemctl restart realm
         if systemctl is-active --quiet realm; then
@@ -510,9 +552,13 @@ delete_forward() {
     declare -a listen_ports=()
     declare -a remote_addrs=()
     declare -a remarks=()
+    declare -a transports=()
 
     local index=1
     local current_remark=""
+    local current_listen=""
+    local current_remote=""
+    local current_transport=""
     local in_endpoint=false
 
     echo "当前转发规则："
@@ -527,28 +573,48 @@ delete_forward() {
         # 检查endpoints开始
         elif [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
             in_endpoint=true
+            current_listen=""
+            current_remote=""
+            current_transport=""
         # 检查listen行
         elif [[ "$line" =~ ^listen.*= ]] && [ "$in_endpoint" = true ]; then
-            local listen_port=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
-            # 读取下一行获取remote
-            read -r next_line
-            if [[ "$next_line" =~ ^remote.*= ]]; then
-                local remote_addr=$(echo "$next_line" | grep -o '"[^"]*"' | tr -d '"')
-
+            current_listen=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查remote行
+        elif [[ "$line" =~ ^remote.*= ]] && [ "$in_endpoint" = true ]; then
+            current_remote=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查transport行
+        elif [[ "$line" =~ ^transport.*= ]] && [ "$in_endpoint" = true ]; then
+            current_transport=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查空行或下一个section，表示当前endpoint结束
+        elif [[ "$line" =~ ^$ ]] || [[ "$line" =~ ^\[ ]] && [ "$in_endpoint" = true ]; then
+            if [ -n "$current_listen" ] && [ -n "$current_remote" ]; then
                 # 保存规则信息
-                listen_ports+=("$listen_port")
-                remote_addrs+=("$remote_addr")
+                listen_ports+=("$current_listen")
+                remote_addrs+=("$current_remote")
                 remarks+=("$current_remark")
+                transports+=("$current_transport")
 
-                printf " %-3s | %-15s | %-28s | %-15s\n" "$index" "$listen_port" "$remote_addr" "$current_remark"
+                printf " %-3s | %-15s | %-28s | %-15s\n" "$index" "$current_listen" "$current_remote" "$current_remark"
                 index=$((index + 1))
-
-                # 重置状态
-                in_endpoint=false
-                current_remark=""
             fi
+
+            # 重置状态
+            in_endpoint=false
+            current_remark=""
+            current_listen=""
+            current_remote=""
+            current_transport=""
         fi
     done < "$CONFIG_FILE"
+
+    # 处理文件末尾的最后一个endpoint
+    if [ "$in_endpoint" = true ] && [ -n "$current_listen" ] && [ -n "$current_remote" ]; then
+        listen_ports+=("$current_listen")
+        remote_addrs+=("$current_remote")
+        remarks+=("$current_remark")
+        transports+=("$current_transport")
+        printf " %-3s | %-15s | %-28s | %-15s\n" "$index" "$current_listen" "$current_remote" "$current_remark"
+    fi
 
     if [ ${#listen_ports[@]} -eq 0 ]; then
         echo "暂无转发规则"
@@ -583,9 +649,18 @@ delete_forward() {
     echo "   🎯 转发地址: $remote_part"
     echo "   📝 备注: $remark_part"
     echo ""
-    read -e -p "确认删除? (输入 'YES' 确认): " confirm
+    echo "请选择操作："
+    echo " [1] 确认删除"
+    echo " [0] 取消删除 (默认)"
+    echo ""
+    read -e -p "请选择 (1/0，默认0): " confirm
 
-    if [ "$confirm" = "YES" ]; then
+    # 默认为取消删除
+    if [ -z "$confirm" ]; then
+        confirm="0"
+    fi
+
+    if [ "$confirm" = "1" ]; then
         # 备份配置文件
         cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
         echo "✅ 配置文件已备份"
@@ -594,8 +669,17 @@ delete_forward() {
         local temp_file="/tmp/realm_new_config.toml"
 
         # 先写入network部分
-        grep -A 20 "^\[network\]" "$CONFIG_FILE" | grep -B 20 "^$" | head -n -1 > "$temp_file"
-        echo "" >> "$temp_file"
+        cat > "$temp_file" << 'EOF'
+[network]
+no_tcp = false
+use_udp = true
+send_proxy = true
+accept_proxy = true
+send_proxy_version = 2
+tcp_timeout = 10
+tcp_nodelay = true
+
+EOF
 
         # 重新添加除了选中规则外的所有规则
         for ((i=0; i<${#listen_ports[@]}; i++)); do
@@ -605,8 +689,12 @@ delete_forward() {
 # 备注: ${remarks[$i]}
 listen = "${listen_ports[$i]}"
 remote = "${remote_addrs[$i]}"
-
 EOF
+                # 如果有transport配置，添加它
+                if [ -n "${transports[$i]}" ]; then
+                    echo "transport = \"${transports[$i]}\"" >> "$temp_file"
+                fi
+                echo "" >> "$temp_file"
             fi
         done
 
@@ -616,14 +704,21 @@ EOF
         echo "✅ 规则删除成功"
 
         # 询问是否重启服务
-        read -e -p "是否立即重启服务以应用配置? (Y/n): " restart_confirm
+        read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
         if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
             if systemctl restart realm 2>/dev/null; then
                 echo "✅ 服务重启成功"
             else
                 echo "❌ 服务重启失败，恢复备份配置"
-                cp "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)" "$CONFIG_FILE"
-                systemctl restart realm
+                # 找到最新的备份文件
+                local latest_backup=$(ls -t "${CONFIG_FILE}.backup."* 2>/dev/null | head -1)
+                if [ -n "$latest_backup" ]; then
+                    cp "$latest_backup" "$CONFIG_FILE"
+                    echo "✅ 已恢复备份配置: $(basename "$latest_backup")"
+                    systemctl restart realm
+                else
+                    echo "❌ 未找到备份文件"
+                fi
             fi
         fi
     else
@@ -969,7 +1064,7 @@ configure_proxy_protocol() {
     esac
 
     echo ""
-    read -e -p "是否立即重启服务以应用配置? (Y/n): " restart_confirm
+    read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
     if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
         systemctl restart realm
         if systemctl is-active --quiet realm; then
@@ -1774,7 +1869,7 @@ show_transport_config() {
 
 # 重启服务提示
 restart_service_prompt() {
-    read -e -p "是否立即重启服务以应用配置? (Y/n): " restart_confirm
+    read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
     if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
         systemctl restart realm
         if systemctl is-active --quiet realm; then
@@ -2018,9 +2113,13 @@ restore_config() {
     echo ""
     echo "⚠️  当前配置文件将被覆盖！"
     echo ""
-    read -e -p "确认恢复? (输入 'YES' 确认): " confirm
+    echo "请选择操作："
+    echo " [1] 确认恢复"
+    echo " [0] 取消恢复"
+    echo ""
+    read -e -p "请选择 (1/0): " confirm
 
-    if [ "$confirm" = "YES" ]; then
+    if [ "$confirm" = "1" ]; then
         # 备份当前配置
         if [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" "${CONFIG_FILE}.before_restore.$(date +%Y%m%d_%H%M%S)"
@@ -2032,7 +2131,7 @@ restore_config() {
         echo "✅ 配置文件已恢复"
 
         # 询问是否重启服务
-        read -e -p "是否立即重启服务以应用配置? (Y/n): " restart_confirm
+        read -e -p "是否立即重启服务以应用配置? (Y/n，默认Y): " restart_confirm
         if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
             if systemctl restart realm 2>/dev/null; then
                 echo "✅ 服务重启成功"
@@ -2107,9 +2206,13 @@ update_script() {
                 echo "   • 新脚本将替换当前脚本"
                 echo "   • 脚本将自动重启"
                 echo ""
-                read -e -p "确认更新? (输入 'YES' 确认): " confirm
+                echo "请选择操作："
+                echo " [1] 确认更新"
+                echo " [0] 取消更新"
+                echo ""
+                read -e -p "请选择 (1/0): " confirm
 
-                if [ "$confirm" = "YES" ]; then
+                if [ "$confirm" = "1" ]; then
                     # 备份当前脚本
                     local backup_script="${CURRENT_SCRIPT}.backup.$(date +%Y%m%d_%H%M%S)"
                     cp "$CURRENT_SCRIPT" "$backup_script"
