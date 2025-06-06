@@ -1833,6 +1833,7 @@ configure_ws_tunnel() {
     echo " [1] 完整隧道配置（A机器+B机器）"
     echo " [2] 仅配置A机器（WS客户端）"
     echo " [3] 仅配置B机器（WS服务端）"
+    echo " [4] 双栈隧道配置（IPv4监听+IPv6转发）"
     echo " [0] 返回"
     echo ""
     read -e -p "请选择: " config_type
@@ -1846,6 +1847,9 @@ configure_ws_tunnel() {
             ;;
         3)
             configure_ws_server_only
+            ;;
+        4)
+            configure_dual_stack_tunnel
             ;;
         0)
             return
@@ -2039,6 +2043,195 @@ EOF
             echo "  监听端口: $listen_ports"
             echo "  WS端口: $ws_port"
             echo "  伪装域名: $fake_domain"
+            ;;
+
+        *)
+            echo "❌ 无效选择"
+            read -e -p "按回车键返回..."
+            return
+            ;;
+    esac
+
+    restart_service_prompt
+}
+
+# 双栈隧道配置（IPv4监听+IPv6转发）
+configure_dual_stack_tunnel() {
+    echo ""
+    echo "🌐 双栈隧道配置（IPv4监听+IPv6转发）"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    echo "双栈隧道特点："
+    echo "✅ A机器：用户IPv4连接，向B机器IPv6转发"
+    echo "✅ B机器：IPv6监听，向XrayR IPv4转发"
+    echo "✅ 适合双栈服务器环境"
+    echo "✅ 充分利用IPv6网络优势"
+    echo ""
+    echo "—————————————————————————————————————————————————————————"
+
+    echo "请提供以下信息："
+    echo ""
+
+    # 获取B机器IPv6信息
+    read -e -p "🌐 B机器IPv6地址: " b_machine_ipv6
+    if [ -z "$b_machine_ipv6" ]; then
+        echo "❌ B机器IPv6地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 获取XrayR信息
+    read -e -p "🎯 XrayR节点地址 (IPv4): " xrayr_host
+    if [ -z "$xrayr_host" ]; then
+        echo "❌ XrayR地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 XrayR节点端口: " xrayr_port
+    if [ -z "$xrayr_port" ]; then
+        echo "❌ XrayR端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 获取端口配置
+    read -e -p "📍 A机器监听端口 (如: 35812): " listen_ports
+    if [ -z "$listen_ports" ]; then
+        listen_ports="35812"
+    fi
+
+    read -e -p "🔌 B机器监听端口 (默认与A机器相同): " b_listen_port
+    if [ -z "$b_listen_port" ]; then
+        b_listen_port="$listen_ports"
+    fi
+
+    # 添加备注功能
+    read -e -p "📝 备注信息 (可选，如: 双栈转发): " tunnel_remark
+    if [ -z "$tunnel_remark" ]; then
+        tunnel_remark="双栈隧道转发"
+    fi
+
+    echo ""
+    echo "📋 配置摘要："
+    echo "  🌐 B机器IPv6: $b_machine_ipv6"
+    echo "  🎯 XrayR: $xrayr_host:$xrayr_port"
+    echo "  📍 A机器端口: $listen_ports (IPv4监听)"
+    echo "  🔌 B机器端口: $b_listen_port (IPv6监听)"
+    echo "  📝 备注信息: $tunnel_remark"
+    echo ""
+
+    read -e -p "确认配置? (Y/n): " confirm
+    if [[ "$confirm" =~ ^[Nn]$ ]]; then
+        echo "❌ 已取消配置"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 生成配置文件
+    echo ""
+    echo "📝 生成配置文件..."
+
+    # 处理IPv6地址格式
+    local b_ipv6_format
+    if [[ "$b_machine_ipv6" == *:*:* ]] && [[ "$b_machine_ipv6" != \[*\] ]]; then
+        b_ipv6_format="[$b_machine_ipv6]:$b_listen_port"
+    else
+        b_ipv6_format="$b_machine_ipv6:$b_listen_port"
+    fi
+
+    # 备份现有配置
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+
+    # 检测当前机器类型
+    echo ""
+    echo "请确认当前机器类型："
+    echo " [1] A机器（国内服务器）"
+    echo " [2] B机器（海外服务器）"
+    echo ""
+    read -e -p "当前机器是: " current_machine
+
+    case $current_machine in
+        1)
+            # A机器配置：IPv4监听，IPv6转发
+            cat > "$CONFIG_FILE" << EOF
+[network]
+no_tcp = false
+use_udp = true
+send_proxy = true
+accept_proxy = false
+send_proxy_version = 2
+tcp_timeout = 10
+tcp_nodelay = true
+ipv6_only = true
+
+EOF
+
+            # 为每个端口添加配置
+            for port in $listen_ports; do
+                cat >> "$CONFIG_FILE" << EOF
+[[endpoints]]
+# 备注: $tunnel_remark - A机器IPv4监听端口$port
+listen = "0.0.0.0:$port"
+remote = "$b_ipv6_format"
+
+EOF
+            done
+
+            echo "✅ A机器双栈配置完成！"
+            echo ""
+            echo "📋 A机器配置摘要："
+            echo "  📍 监听端口: $listen_ports (IPv4)"
+            echo "  🎯 连接目标: $b_ipv6_format (IPv6)"
+            echo "  🔄 转发模式: IPv4→IPv6"
+            echo "  🔐 PROXY Protocol: 发送"
+            echo ""
+            echo "📝 B机器配置命令："
+            echo "在B机器上运行相同脚本，选择选项17 → 4，使用以下信息："
+            echo "  XrayR地址: $xrayr_host"
+            echo "  XrayR端口: $xrayr_port"
+            echo "  监听端口: $b_listen_port"
+            echo "  备注信息: $tunnel_remark"
+            ;;
+
+        2)
+            # B机器配置：IPv6监听，IPv4转发
+            cat > "$CONFIG_FILE" << EOF
+[network]
+no_tcp = false
+use_udp = true
+send_proxy = true
+accept_proxy = true
+send_proxy_version = 2
+tcp_timeout = 10
+tcp_nodelay = true
+ipv6_only = false
+
+[[endpoints]]
+# 备注: $tunnel_remark - B机器IPv6监听
+listen = "[::]:$b_listen_port"
+remote = "$xrayr_host:$xrayr_port"
+
+EOF
+
+            echo "✅ B机器双栈配置完成！"
+            echo ""
+            echo "📋 B机器配置摘要："
+            echo "  📍 监听端口: $b_listen_port (IPv6)"
+            echo "  🎯 转发目标: $xrayr_host:$xrayr_port (IPv4)"
+            echo "  🔄 转发模式: IPv6→IPv4"
+            echo "  🔐 PROXY Protocol: 接收+发送"
+            echo ""
+            echo "🔥 防火墙设置："
+            echo "  ufw allow $b_listen_port"
+            echo "  ip6tables -A INPUT -p tcp --dport $b_listen_port -j ACCEPT"
+            echo ""
+            echo "📝 A机器配置命令："
+            echo "在A机器上运行相同脚本，选择选项17 → 4，使用以下信息："
+            echo "  B机器IPv6: $b_machine_ipv6"
+            echo "  监听端口: $listen_ports"
+            echo "  备注信息: $tunnel_remark"
             ;;
 
         *)
