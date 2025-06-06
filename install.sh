@@ -137,71 +137,48 @@ check_proxy_protocol_status() {
 # 显示菜单
 show_menu() {
     clear
-    echo " "
-    echo " ████████████████████████████████████████████████████████"
-    echo " █                                                      █"
-    echo " █           Realm 完整管理脚本 v2.0                    █"
-    echo " █         支持GitHub加速 + PROXY Protocol             █"
-    echo " █                                                      █"
-    echo " ████████████████████████████████████████████████████████"
-    echo " "
-    echo "—————————————————————————————————————————————————————————"
-    echo " 📦 安装管理"
-    echo "   1. 安装 Realm"
-    echo "   2. 卸载 Realm"
-    echo "   3. 更换 GitHub 加速代理"
-    echo "—————————————————————————————————————————————————————————"
-    echo " 🔧 规则管理"
-    echo "   4. 添加转发规则"
-    echo "   5. 查看转发规则"
-    echo "   6. 删除转发规则"
-    echo "   7. 修复配置文件"
-    echo "—————————————————————————————————————————————————————————"
-    echo " ⚙️  服务管理"
-    echo "   8. 启动服务"
-    echo "   9. 停止服务"
-    echo "   10. 重启服务"
-    echo "   11. 查看服务状态"
-    echo "—————————————————————————————————————————————————————————"
-    echo " 🔐 PROXY Protocol"
-    echo "   12. 配置 PROXY Protocol"
-    echo "   13. 查看 PROXY Protocol 状态"
-    echo "—————————————————————————————————————————————————————————"
-    echo " 🌐 传输层配置"
-    echo "   14. 配置 WebSocket (WS)"
-    echo "   15. 配置 TLS 加密"
-    echo "   16. 配置 WebSocket over TLS (WSS)"
-    echo "   17. 一键配置 WSS 隧道"
-    echo "   18. 导入 SSL 证书文件"
-    echo "   19. 查看传输层配置"
-    echo "—————————————————————————————————————————————————————————"
-    echo " 📊 日志监控"
-    echo "   20. 查看实时日志"
-    echo "   21. 查看错误日志"
-    echo "   22. 查看连接统计"
-    echo "—————————————————————————————————————————————————————————"
-    echo " 🛠️  工具功能"
-    echo "   23. 测试网络连通性"
-    echo "   24. 备份配置文件"
-    echo "   25. 恢复配置文件"
-    echo "   26. 更新脚本"
-    echo "—————————————————————————————————————————————————————————"
-    echo "   0. 退出脚本"
+    echo "🌟 Realm 网络转发管理工具 v2.0"
     echo "—————————————————————————————————————————————————————————"
     echo ""
+
+    # 显示状态信息
     echo -n " 📋 Realm状态: "
     check_realm_status
     echo -n " 🔄 服务状态: "
     check_service_status
     echo -n " 🔐 PROXY Protocol: "
     check_proxy_protocol_status
-    
+
     if [ -n "$SELECTED_PROXY" ]; then
         echo -e " 🚀 GitHub加速: \\033[0;32m${SELECTED_PROXY}\\033[0m"
     else
         echo -e " 🚀 GitHub加速: \\033[0;33m直连\\033[0m"
     fi
-    
+
+    echo ""
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    # 紧凑型菜单布局
+    echo " 📦 基础管理        🔧 规则管理        ⚙️  服务管理"
+    echo "  1. 安装 Realm      4. 添加规则        8. 启动服务"
+    echo "  2. 卸载 Realm      5. 查看规则        9. 停止服务"
+    echo "  3. GitHub代理      6. 删除规则        10. 重启服务"
+    echo "                     7. 修复配置        11. 服务状态"
+    echo ""
+    echo " 🔐 PROXY协议       🌐 传输层配置      📊 监控工具"
+    echo "  12. 配置PROXY      17. WS隧道配置     19. 实时日志"
+    echo "  13. PROXY状态      18. 传输层状态     20. 错误日志"
+    echo "                     14. WebSocket      21. 连接统计"
+    echo "                     15. TLS加密        22. 网络测试"
+    echo "                     16. WSS配置"
+    echo ""
+    echo " 🛠️  系统工具"
+    echo "  23. 备份配置       24. 恢复配置       25. 更新脚本"
+    echo ""
+    echo "—————————————————————————————————————————————————————————"
+    echo " 0. 退出脚本"
+    echo "—————————————————————————————————————————————————————————"
     echo ""
 }
 
@@ -1781,10 +1758,10 @@ configure_wss_server() {
     restart_service_prompt
 }
 
-# 一键配置WSS隧道
-configure_wss_tunnel() {
+# 一键配置WS隧道转发
+configure_ws_tunnel() {
     clear
-    echo "🚀 一键配置 WSS 隧道"
+    echo "🚀 一键配置 WebSocket 隧道转发"
     echo "—————————————————————————————————————————————————————————"
     echo ""
 
@@ -1794,27 +1771,32 @@ configure_wss_tunnel() {
         return
     fi
 
-    echo "WSS隧道配置向导："
-    echo "• 自动配置A机器和B机器的WSS连接"
-    echo "• 支持导入现有SSL证书文件"
-    echo "• 一键生成完整配置"
+    echo "WebSocket隧道特点："
+    echo "✅ 无需SSL证书，配置简单"
+    echo "✅ 可穿透HTTP代理和防火墙"
+    echo "✅ 伪装成正常网页访问"
+    echo "✅ 适合快速部署和测试"
     echo ""
     echo "—————————————————————————————————————————————————————————"
 
-    # 选择机器类型
-    echo "请选择当前机器类型："
-    echo " [1] A机器（国内服务器，WSS客户端）"
-    echo " [2] B机器（海外服务器，WSS服务端）"
+    # 选择配置类型
+    echo "请选择配置类型："
+    echo " [1] 完整隧道配置（A机器+B机器）"
+    echo " [2] 仅配置A机器（WS客户端）"
+    echo " [3] 仅配置B机器（WS服务端）"
     echo " [0] 返回"
     echo ""
-    read -e -p "请选择: " machine_type
+    read -e -p "请选择: " config_type
 
-    case $machine_type in
+    case $config_type in
         1)
-            configure_wss_client_tunnel
+            configure_complete_ws_tunnel
             ;;
         2)
-            configure_wss_server_tunnel
+            configure_ws_client_only
+            ;;
+        3)
+            configure_ws_server_only
             ;;
         0)
             return
@@ -1826,128 +1808,25 @@ configure_wss_tunnel() {
     esac
 }
 
-# 配置WSS客户端隧道（A机器）
-configure_wss_client_tunnel() {
+# 完整WS隧道配置
+configure_complete_ws_tunnel() {
     echo ""
-    echo "🔧 配置A机器（WSS客户端）"
+    echo "🔧 完整WebSocket隧道配置"
     echo "—————————————————————————————————————————————————————————"
     echo ""
 
-    # 获取基本信息
-    read -e -p "🌐 B机器域名或IP: " server_host
-    if [ -z "$server_host" ]; then
-        echo "❌ 服务器地址不能为空"
+    echo "请提供以下信息："
+    echo ""
+
+    # 获取B机器信息
+    read -e -p "🌐 B机器IP地址: " b_machine_ip
+    if [ -z "$b_machine_ip" ]; then
+        echo "❌ B机器IP不能为空"
         read -e -p "按回车键返回..."
         return
     fi
 
-    read -e -p "🔌 B机器WSS端口 (默认443): " server_port
-    if [ -z "$server_port" ]; then
-        server_port="443"
-    fi
-
-    read -e -p "🏠 HTTP Host (默认使用服务器地址): " http_host
-    if [ -z "$http_host" ]; then
-        http_host="$server_host"
-    fi
-
-    read -e -p "📂 WebSocket路径 (默认/ws): " ws_path
-    if [ -z "$ws_path" ]; then
-        ws_path="/ws"
-    fi
-
-    read -e -p "🏷️  SNI (默认使用HTTP Host): " sni
-    if [ -z "$sni" ]; then
-        sni="$http_host"
-    fi
-
-    read -e -p "🔒 跳过证书验证? (y/N): " insecure
-
-    echo ""
-    echo "📍 配置监听端口："
-    echo "请输入要配置的端口（多个端口用空格分隔）"
-    read -e -p "监听端口 (如: 29731 29732 29733): " listen_ports
-
-    if [ -z "$listen_ports" ]; then
-        echo "❌ 至少需要配置一个端口"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 构建transport配置
-    local transport_config="ws;host=$http_host;path=$ws_path;tls;sni=$sni"
-    if [[ "$insecure" =~ ^[Yy]$ ]]; then
-        transport_config="$transport_config;insecure"
-    fi
-
-    echo ""
-    echo "✅ 开始配置WSS客户端规则..."
-
-    # 为每个端口添加配置
-    local port_count=1
-    for port in $listen_ports; do
-        # 验证端口号
-        if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-            echo "⚠️  跳过无效端口: $port"
-            continue
-        fi
-
-        # 检查端口冲突
-        if grep -q "listen = \"0.0.0.0:$port\"" "$CONFIG_FILE" 2>/dev/null; then
-            echo "⚠️  端口 $port 已存在，跳过"
-            continue
-        fi
-
-        # 生成不同的WebSocket路径
-        local current_path="$ws_path"
-        if [ $port_count -gt 1 ]; then
-            current_path="${ws_path}${port_count}"
-        fi
-
-        local current_transport="ws;host=$http_host;path=$current_path;tls;sni=$sni"
-        if [[ "$insecure" =~ ^[Yy]$ ]]; then
-            current_transport="$current_transport;insecure"
-        fi
-
-        # 添加配置
-        cat >> "$CONFIG_FILE" << EOF
-
-[[endpoints]]
-# 备注: WSS客户端隧道 - 端口$port
-listen = "0.0.0.0:$port"
-remote = "$server_host:$server_port"
-transport = "$current_transport"
-EOF
-
-        echo "  ✅ 已添加端口 $port (路径: $current_path)"
-        port_count=$((port_count + 1))
-    done
-
-    echo ""
-    echo "🎉 WSS客户端配置完成！"
-    echo ""
-    echo "📋 配置摘要："
-    echo "  🌐 目标服务器: $server_host:$server_port"
-    echo "  🏠 HTTP Host: $http_host"
-    echo "  📂 WebSocket路径: $ws_path (多端口自动递增)"
-    echo "  🏷️  SNI: $sni"
-    if [[ "$insecure" =~ ^[Yy]$ ]]; then
-        echo "  🔒 证书验证: 已跳过"
-    fi
-    echo "  📍 监听端口: $listen_ports"
-    echo ""
-
-    restart_service_prompt
-}
-
-# 配置WSS服务端隧道（B机器）
-configure_wss_server_tunnel() {
-    echo ""
-    echo "🔧 配置B机器（WSS服务端）"
-    echo "—————————————————————————————————————————————————————————"
-    echo ""
-
-    # 获取基本信息
+    # 获取XrayR信息
     read -e -p "🎯 XrayR节点地址: " xrayr_host
     if [ -z "$xrayr_host" ]; then
         echo "❌ XrayR地址不能为空"
@@ -1962,72 +1841,150 @@ configure_wss_server_tunnel() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (域名): " http_host
-    if [ -z "$http_host" ]; then
-        echo "❌ HTTP Host不能为空"
+    # 获取端口配置
+    read -e -p "📍 A机器监听端口 (如: 29731 29732): " listen_ports
+    if [ -z "$listen_ports" ]; then
+        listen_ports="29731"
+    fi
+
+    read -e -p "🔌 B机器WS端口 (默认8080): " ws_port
+    if [ -z "$ws_port" ]; then
+        ws_port="8080"
+    fi
+
+    # 生成伪装域名
+    local fake_domain="www.microsoft.com"
+    read -e -p "🎭 伪装域名 (默认: $fake_domain): " custom_domain
+    if [ -n "$custom_domain" ]; then
+        fake_domain="$custom_domain"
+    fi
+
+    echo ""
+    echo "📋 配置摘要："
+    echo "  🌐 B机器IP: $b_machine_ip"
+    echo "  🎯 XrayR: $xrayr_host:$xrayr_port"
+    echo "  📍 A机器端口: $listen_ports"
+    echo "  🔌 B机器端口: $ws_port"
+    echo "  🎭 伪装域名: $fake_domain"
+    echo ""
+
+    read -e -p "确认配置? (Y/n): " confirm
+    if [[ "$confirm" =~ ^[Nn]$ ]]; then
+        echo "❌ 已取消配置"
         read -e -p "按回车键返回..."
         return
     fi
 
-    read -e -p "📂 WebSocket路径 (默认/ws): " ws_path
-    if [ -z "$ws_path" ]; then
-        ws_path="/ws"
+    # 生成配置文件
+    echo ""
+    echo "📝 生成配置文件..."
+
+    # 处理IPv6地址格式
+    local target_format
+    if [[ "$xrayr_host" == *:*:* ]] && [[ "$xrayr_host" != \[*\] ]]; then
+        target_format="[$xrayr_host]:$xrayr_port"
+    else
+        target_format="$xrayr_host:$xrayr_port"
     fi
 
-    echo ""
-    echo "🔒 SSL证书配置："
-    echo " [1] 使用现有证书文件"
-    echo " [2] 生成自签名证书"
-    echo ""
-    read -e -p "请选择: " cert_option
+    # 备份现有配置
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
 
-    local transport_config="ws;host=$http_host;path=$ws_path;tls"
+    # 检测当前机器类型
+    echo ""
+    echo "请确认当前机器类型："
+    echo " [1] A机器（国内服务器）"
+    echo " [2] B机器（海外服务器）"
+    echo ""
+    read -e -p "当前机器是: " current_machine
 
-    case $cert_option in
+    case $current_machine in
         1)
+            # A机器配置
+            cat > "$CONFIG_FILE" << EOF
+[network]
+no_tcp = false
+use_udp = true
+send_proxy = true
+accept_proxy = false
+send_proxy_version = 2
+tcp_timeout = 10
+tcp_nodelay = true
+
+EOF
+
+            # 为每个端口添加WS客户端配置
+            local port_count=1
+            for port in $listen_ports; do
+                local ws_path="/ws"
+                if [ $port_count -gt 1 ]; then
+                    ws_path="/ws$port_count"
+                fi
+
+                cat >> "$CONFIG_FILE" << EOF
+[[endpoints]]
+# 备注: WS客户端 - 端口$port
+listen = "0.0.0.0:$port"
+remote = "$b_machine_ip:$ws_port"
+transport = "ws;host=$fake_domain;path=$ws_path"
+
+EOF
+                port_count=$((port_count + 1))
+            done
+
+            echo "✅ A机器WS客户端配置完成！"
             echo ""
-            echo "📁 请提供SSL证书文件路径："
-            read -e -p "🔑 私钥文件路径: " key_path
-            if [ -z "$key_path" ]; then
-                echo "❌ 私钥路径不能为空"
-                read -e -p "按回车键返回..."
-                return
-            fi
-
-            read -e -p "📜 证书文件路径: " cert_path
-            if [ -z "$cert_path" ]; then
-                echo "❌ 证书路径不能为空"
-                read -e -p "按回车键返回..."
-                return
-            fi
-
-            # 验证文件是否存在
-            if [ ! -f "$key_path" ]; then
-                echo "❌ 私钥文件不存在: $key_path"
-                echo ""
-                echo "💡 提示：如果您有证书文件，请使用菜单选项18导入"
-                read -e -p "按回车键返回..."
-                return
-            fi
-
-            if [ ! -f "$cert_path" ]; then
-                echo "❌ 证书文件不存在: $cert_path"
-                echo ""
-                echo "💡 提示：如果您有证书文件，请使用菜单选项18导入"
-                read -e -p "按回车键返回..."
-                return
-            fi
-
-            transport_config="$transport_config;cert=$cert_path;key=$key_path"
+            echo "📋 A机器配置摘要："
+            echo "  📍 监听端口: $listen_ports"
+            echo "  🎯 连接目标: $b_machine_ip:$ws_port"
+            echo "  🎭 伪装域名: $fake_domain"
+            echo ""
+            echo "📝 B机器配置命令："
+            echo "在B机器上运行相同脚本，选择选项17 → 1，使用以下信息："
+            echo "  XrayR地址: $xrayr_host"
+            echo "  XrayR端口: $xrayr_port"
+            echo "  WS端口: $ws_port"
+            echo "  伪装域名: $fake_domain"
             ;;
+
         2)
-            read -e -p "🏷️  服务器名称 (CN): " server_name
-            if [ -z "$server_name" ]; then
-                server_name="$http_host"
-            fi
+            # B机器配置
+            cat > "$CONFIG_FILE" << EOF
+[network]
+no_tcp = false
+use_udp = true
+send_proxy = true
+accept_proxy = true
+send_proxy_version = 2
+tcp_timeout = 10
+tcp_nodelay = true
 
-            transport_config="$transport_config;servername=$server_name"
+[[endpoints]]
+# 备注: WS服务端 - 转发到XrayR
+listen = "0.0.0.0:$ws_port"
+remote = "$target_format"
+transport = "ws;host=$fake_domain;path=/ws"
+
+EOF
+
+            echo "✅ B机器WS服务端配置完成！"
+            echo ""
+            echo "📋 B机器配置摘要："
+            echo "  📍 监听端口: $ws_port"
+            echo "  🎯 转发目标: $target_format"
+            echo "  🎭 伪装域名: $fake_domain"
+            echo ""
+            echo "🔥 防火墙设置："
+            echo "  ufw allow $ws_port"
+            echo ""
+            echo "📝 A机器配置命令："
+            echo "在A机器上运行相同脚本，选择选项17 → 1，使用以下信息："
+            echo "  B机器IP: $b_machine_ip"
+            echo "  监听端口: $listen_ports"
+            echo "  WS端口: $ws_port"
+            echo "  伪装域名: $fake_domain"
             ;;
+
         *)
             echo "❌ 无效选择"
             read -e -p "按回车键返回..."
@@ -2035,11 +1992,115 @@ configure_wss_server_tunnel() {
             ;;
     esac
 
+    restart_service_prompt
+}
+
+# WS客户端配置（A机器）
+configure_ws_client_only() {
     echo ""
-    echo "📍 配置监听端口："
-    read -e -p "WSS监听端口 (默认443): " listen_port
+    echo "🔧 A机器WS客户端配置"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "🌐 B机器IP地址: " server_ip
+    if [ -z "$server_ip" ]; then
+        echo "❌ 服务器IP不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 B机器WS端口 (默认8080): " server_port
+    if [ -z "$server_port" ]; then
+        server_port="8080"
+    fi
+
+    read -e -p "📍 本地监听端口 (如: 29731): " local_port
+    if [ -z "$local_port" ]; then
+        local_port="29731"
+    fi
+
+    local fake_domain="www.cloudflare.com"
+    read -e -p "🎭 伪装域名 (默认: $fake_domain): " custom_domain
+    if [ -n "$custom_domain" ]; then
+        fake_domain="$custom_domain"
+    fi
+
+    read -e -p "📂 WebSocket路径 (默认/ws): " ws_path
+    if [ -z "$ws_path" ]; then
+        ws_path="/ws"
+    fi
+
+    # 验证端口号
+    if ! [[ "$local_port" =~ ^[0-9]+$ ]] || [ "$local_port" -lt 1 ] || [ "$local_port" -gt 65535 ]; then
+        echo "❌ 端口号无效"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 检查端口冲突
+    if grep -q "listen = \"0.0.0.0:$local_port\"" "$CONFIG_FILE" 2>/dev/null; then
+        echo "❌ 端口 $local_port 已在配置中使用"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 添加WS客户端配置
+    cat >> "$CONFIG_FILE" << EOF
+
+[[endpoints]]
+# 备注: WS客户端 - 隧道转发
+listen = "0.0.0.0:$local_port"
+remote = "$server_ip:$server_port"
+transport = "ws;host=$fake_domain;path=$ws_path"
+EOF
+
+    echo ""
+    echo "✅ WS客户端配置完成！"
+    echo ""
+    echo "📋 配置摘要："
+    echo "  📍 监听端口: $local_port"
+    echo "  🎯 连接目标: $server_ip:$server_port"
+    echo "  🎭 伪装域名: $fake_domain"
+    echo "  📂 WebSocket路径: $ws_path"
+
+    restart_service_prompt
+}
+
+# WS服务端配置（B机器）
+configure_ws_server_only() {
+    echo ""
+    echo "🔧 B机器WS服务端配置"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "🎯 XrayR节点地址: " xrayr_host
+    if [ -z "$xrayr_host" ]; then
+        echo "❌ XrayR地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 XrayR节点端口: " xrayr_port
+    if [ -z "$xrayr_port" ]; then
+        echo "❌ XrayR端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "📍 WS监听端口 (默认8080): " listen_port
     if [ -z "$listen_port" ]; then
-        listen_port="443"
+        listen_port="8080"
+    fi
+
+    local fake_domain="www.cloudflare.com"
+    read -e -p "🎭 伪装域名 (默认: $fake_domain): " custom_domain
+    if [ -n "$custom_domain" ]; then
+        fake_domain="$custom_domain"
+    fi
+
+    read -e -p "📂 WebSocket路径 (默认/ws): " ws_path
+    if [ -z "$ws_path" ]; then
+        ws_path="/ws"
     fi
 
     # 验证端口号
@@ -2064,239 +2125,29 @@ configure_wss_server_tunnel() {
         target_format="$xrayr_host:$xrayr_port"
     fi
 
-    # 添加WSS服务端配置
+    # 添加WS服务端配置
     cat >> "$CONFIG_FILE" << EOF
 
 [[endpoints]]
-# 备注: WSS服务端隧道 - 转发到XrayR
+# 备注: WS服务端 - 隧道转发
 listen = "0.0.0.0:$listen_port"
 remote = "$target_format"
-transport = "$transport_config"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
 
     echo ""
-    echo "🎉 WSS服务端配置完成！"
+    echo "✅ WS服务端配置完成！"
     echo ""
     echo "📋 配置摘要："
-    echo "  📍 监听端口: 0.0.0.0:$listen_port"
+    echo "  📍 监听端口: $listen_port"
     echo "  🎯 转发目标: $target_format"
-    echo "  🌐 HTTP Host: $http_host"
+    echo "  🎭 伪装域名: $fake_domain"
     echo "  📂 WebSocket路径: $ws_path"
-    if [ "$cert_option" == "1" ]; then
-        echo "  🔑 私钥文件: $key_path"
-        echo "  📜 证书文件: $cert_path"
-    else
-        echo "  🏷️  服务器名: $server_name (自签名)"
-    fi
     echo ""
     echo "🔥 防火墙提醒："
-    echo "  请确保开放端口: ufw allow $listen_port"
-    echo ""
+    echo "  ufw allow $listen_port"
 
     restart_service_prompt
-}
-
-# 导入SSL证书文件
-import_ssl_certificate() {
-    clear
-    echo "📁 导入 SSL 证书文件"
-    echo "—————————————————————————————————————————————————————————"
-    echo ""
-
-    echo "此功能帮助您导入现有的SSL证书文件到服务器"
-    echo "支持的证书格式：.crt, .pem, .cer, .key"
-    echo ""
-    echo "—————————————————————————————————————————————————————————"
-
-    # 选择导入方式
-    echo "请选择导入方式："
-    echo " [1] 从本地文件导入"
-    echo " [2] 从URL下载导入"
-    echo " [3] 粘贴证书内容"
-    echo " [0] 返回"
-    echo ""
-    read -e -p "请选择: " import_method
-
-    case $import_method in
-        1)
-            import_from_local_file
-            ;;
-        2)
-            import_from_url
-            ;;
-        3)
-            import_from_paste
-            ;;
-        0)
-            return
-            ;;
-        *)
-            echo "❌ 无效选择"
-            read -e -p "按回车键返回..."
-            ;;
-    esac
-}
-
-# 从本地文件导入
-import_from_local_file() {
-    echo ""
-    echo "📂 从本地文件导入证书"
-    echo "—————————————————————————————————————————————————————————"
-    echo ""
-
-    read -e -p "📝 请输入域名 (用于创建目录): " domain
-    if [ -z "$domain" ]; then
-        echo "❌ 域名不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 创建证书目录
-    local cert_dir="/etc/ssl/realm/$domain"
-    mkdir -p "$cert_dir"
-
-    echo ""
-    echo "📁 证书文件路径："
-    read -e -p "🔑 私钥文件路径 (.key): " source_key
-    read -e -p "📜 证书文件路径 (.crt/.pem): " source_cert
-
-    # 验证文件存在
-    if [ ! -f "$source_key" ]; then
-        echo "❌ 私钥文件不存在: $source_key"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    if [ ! -f "$source_cert" ]; then
-        echo "❌ 证书文件不存在: $source_cert"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 复制文件
-    local dest_key="$cert_dir/$domain.key"
-    local dest_cert="$cert_dir/$domain.crt"
-
-    cp "$source_key" "$dest_key"
-    cp "$source_cert" "$dest_cert"
-
-    # 设置权限
-    chmod 600 "$dest_key"
-    chmod 644 "$dest_cert"
-
-    echo ""
-    echo "✅ 证书文件导入成功！"
-    echo ""
-    echo "📁 导入位置："
-    echo "  🔑 私钥: $dest_key"
-    echo "  📜 证书: $dest_cert"
-    echo ""
-    echo "📝 在Realm配置中使用："
-    echo "  cert=$dest_cert"
-    echo "  key=$dest_key"
-
-    read -e -p "按回车键返回..."
-}
-
-# 从URL下载导入
-import_from_url() {
-    echo ""
-    echo "🌐 从URL下载证书"
-    echo "—————————————————————————————————————————————————————————"
-    echo ""
-
-    read -e -p "📝 请输入域名: " domain
-    if [ -z "$domain" ]; then
-        echo "❌ 域名不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 创建证书目录
-    local cert_dir="/etc/ssl/realm/$domain"
-    mkdir -p "$cert_dir"
-
-    echo ""
-    echo "📁 证书文件URL："
-    read -e -p "🔑 私钥文件URL: " key_url
-    read -e -p "📜 证书文件URL: " cert_url
-
-    if [ -z "$key_url" ] || [ -z "$cert_url" ]; then
-        echo "❌ URL不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 下载文件
-    local dest_key="$cert_dir/$domain.key"
-    local dest_cert="$cert_dir/$domain.crt"
-
-    echo ""
-    echo "📥 下载证书文件..."
-
-    if wget -q -O "$dest_key" "$key_url" && wget -q -O "$dest_cert" "$cert_url"; then
-        # 设置权限
-        chmod 600 "$dest_key"
-        chmod 644 "$dest_cert"
-
-        echo "✅ 证书文件下载成功！"
-        echo ""
-        echo "📁 保存位置："
-        echo "  🔑 私钥: $dest_key"
-        echo "  📜 证书: $dest_cert"
-    else
-        echo "❌ 下载失败，请检查URL是否正确"
-        rm -f "$dest_key" "$dest_cert"
-    fi
-
-    read -e -p "按回车键返回..."
-}
-
-# 粘贴证书内容
-import_from_paste() {
-    echo ""
-    echo "📋 粘贴证书内容"
-    echo "—————————————————————————————————————————————————————————"
-    echo ""
-
-    read -e -p "📝 请输入域名: " domain
-    if [ -z "$domain" ]; then
-        echo "❌ 域名不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 创建证书目录
-    local cert_dir="/etc/ssl/realm/$domain"
-    mkdir -p "$cert_dir"
-
-    local dest_key="$cert_dir/$domain.key"
-    local dest_cert="$cert_dir/$domain.crt"
-
-    echo ""
-    echo "🔑 请粘贴私钥内容 (以 -----BEGIN PRIVATE KEY----- 开头)："
-    echo "粘贴完成后按 Ctrl+D 结束输入"
-    echo ""
-    cat > "$dest_key"
-
-    echo ""
-    echo "📜 请粘贴证书内容 (以 -----BEGIN CERTIFICATE----- 开头)："
-    echo "粘贴完成后按 Ctrl+D 结束输入"
-    echo ""
-    cat > "$dest_cert"
-
-    # 设置权限
-    chmod 600 "$dest_key"
-    chmod 644 "$dest_cert"
-
-    echo ""
-    echo "✅ 证书内容保存成功！"
-    echo ""
-    echo "📁 保存位置："
-    echo "  🔑 私钥: $dest_key"
-    echo "  📜 证书: $dest_cert"
-
-    read -e -p "按回车键返回..."
 }
 
 # 查看传输层配置
@@ -2323,6 +2174,9 @@ show_transport_config() {
     local in_endpoint=false
     local found_transport=false
 
+    local current_listen=""
+    local current_remote=""
+
     while IFS= read -r line; do
         # 检查备注行
         if [[ "$line" =~ ^#.*备注: ]]; then
@@ -2331,45 +2185,59 @@ show_transport_config() {
         elif [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
             in_endpoint=true
             current_transport=""
+            current_listen=""
+            current_remote=""
         # 检查listen行
         elif [[ "$line" =~ ^listen.*= ]] && [ "$in_endpoint" = true ]; then
-            local listen_port=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
-            # 读取下一行获取remote
-            read -r next_line
-            if [[ "$next_line" =~ ^remote.*= ]]; then
-                local remote_addr=$(echo "$next_line" | grep -o '"[^"]*"' | tr -d '"')
-
-                # 读取下一行检查是否有transport
-                read -r transport_line
-                if [[ "$transport_line" =~ ^transport.*= ]]; then
-                    current_transport=$(echo "$transport_line" | grep -o '"[^"]*"' | tr -d '"')
-
-                    # 解析传输类型
-                    local transport_type="TCP"
-                    if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
-                        transport_type="WSS"
-                    elif [[ "$current_transport" == *"ws"* ]]; then
-                        transport_type="WebSocket"
-                    elif [[ "$current_transport" == *"tls"* ]]; then
-                        transport_type="TLS"
-                    fi
-
-                    printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$listen_port" "$remote_addr" "$transport_type" "$current_remark"
-                    found_transport=true
-                else
-                    # 没有transport配置，回退一行
-                    printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$listen_port" "$remote_addr" "TCP" "$current_remark"
+            current_listen=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查remote行
+        elif [[ "$line" =~ ^remote.*= ]] && [ "$in_endpoint" = true ]; then
+            current_remote=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查transport行
+        elif [[ "$line" =~ ^transport.*= ]] && [ "$in_endpoint" = true ]; then
+            current_transport=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查空行或下一个section，表示当前endpoint结束
+        elif [[ "$line" =~ ^$ ]] || [[ "$line" =~ ^\[ ]] && [ "$in_endpoint" = true ]; then
+            if [ -n "$current_listen" ] && [ -n "$current_remote" ]; then
+                # 解析传输类型
+                local transport_type="TCP"
+                if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+                    transport_type="WSS"
+                elif [[ "$current_transport" == *"ws"* ]]; then
+                    transport_type="WebSocket"
+                elif [[ "$current_transport" == *"tls"* ]]; then
+                    transport_type="TLS"
                 fi
 
+                printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$current_listen" "$current_remote" "$transport_type" "$current_remark"
+                found_transport=true
                 index=$((index + 1))
-
-                # 重置状态
-                in_endpoint=false
-                current_remark=""
-                current_transport=""
             fi
+
+            # 重置状态
+            in_endpoint=false
+            current_remark=""
+            current_transport=""
+            current_listen=""
+            current_remote=""
         fi
     done < "$CONFIG_FILE"
+
+    # 处理文件末尾的最后一个endpoint
+    if [ "$in_endpoint" = true ] && [ -n "$current_listen" ] && [ -n "$current_remote" ]; then
+        # 解析传输类型
+        local transport_type="TCP"
+        if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+            transport_type="WSS"
+        elif [[ "$current_transport" == *"ws"* ]]; then
+            transport_type="WebSocket"
+        elif [[ "$current_transport" == *"tls"* ]]; then
+            transport_type="TLS"
+        fi
+
+        printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$current_listen" "$current_remote" "$transport_type" "$current_remark"
+        found_transport=true
+    fi
 
     if [ "$found_transport" = false ] && [ $index -eq 1 ]; then
         echo "暂无传输层配置"
@@ -2787,7 +2655,7 @@ update_script() {
 # 主循环
 while true; do
     show_menu
-    read -e -p "请选择功能 [0-26]: " choice
+    read -e -p "请选择功能 [0-25]: " choice
 
     # 去掉输入中的空格
     choice=$(echo $choice | tr -d '[:space:]')
@@ -2809,16 +2677,15 @@ while true; do
         14) configure_websocket ;;
         15) configure_tls ;;
         16) configure_wss ;;
-        17) configure_wss_tunnel ;;
-        18) import_ssl_certificate ;;
-        19) show_transport_config ;;
-        20) show_realtime_logs ;;
-        21) show_error_logs ;;
-        22) show_connection_stats ;;
-        23) test_network_connectivity ;;
-        24) backup_config ;;
-        25) restore_config ;;
-        26) update_script ;;
+        17) configure_ws_tunnel ;;
+        18) show_transport_config ;;
+        19) show_realtime_logs ;;
+        20) show_error_logs ;;
+        21) show_connection_stats ;;
+        22) test_network_connectivity ;;
+        23) backup_config ;;
+        24) restore_config ;;
+        25) update_script ;;
         0)
             clear
             echo ""
@@ -2851,7 +2718,7 @@ while true; do
         *)
             echo ""
             echo "❌ 无效选项: $choice"
-            echo "请输入 0-26 之间的数字"
+            echo "请输入 0-25 之间的数字"
             sleep 2
             ;;
     esac
