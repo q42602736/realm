@@ -1842,7 +1842,7 @@ configure_complete_ws_tunnel() {
     fi
 
     # 获取端口配置
-    read -e -p "📍 A机器监听端口 (如: 29731 29732): " listen_ports
+    read -e -p "📍 A机器监听端口: " listen_ports
     if [ -z "$listen_ports" ]; then
         listen_ports="29731"
     fi
