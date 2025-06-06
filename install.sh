@@ -124,12 +124,13 @@ show_menu() {
     echo " 1. 安装 Realm"
     echo " 2. 添加转发规则"
     echo " 3. 查看转发规则"
-    echo " 4. 启动服务"
-    echo " 5. 停止服务"
-    echo " 6. 重启服务"
-    echo " 7. 配置PROXY Protocol"
-    echo " 8. 更换GitHub代理"
-    echo " 9. 卸载 Realm"
+    echo " 4. 删除转发规则"
+    echo " 5. 启动服务"
+    echo " 6. 停止服务"
+    echo " 7. 重启服务"
+    echo " 8. 配置PROXY Protocol"
+    echo " 9. 更换GitHub代理"
+    echo " 10. 卸载 Realm"
     echo " 0. 退出"
     echo "—————————————————————"
     echo ""
@@ -339,6 +340,153 @@ show_all_conf() {
     read -e -p "按回车键返回..."
 }
 
+# 删除转发规则
+delete_forward() {
+    clear
+    echo "删除 Realm 转发规则"
+    echo "—————————————————————————————————————————————————————————————————"
+
+    if [ ! -f "/root/realm/config.toml" ]; then
+        echo "配置文件不存在，请先安装Realm。"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 显示当前规则
+    local index=1
+    local in_endpoint=false
+    local listen_port=""
+    local remote_addr=""
+    local remark=""
+    declare -a rule_lines=()
+    declare -a rule_info=()
+
+    echo "当前转发规则："
+    echo ""
+
+    while IFS= read -r line; do
+        local line_num=$((index))
+
+        # 检查是否是备注行
+        if [[ "$line" =~ ^#.*备注: ]]; then
+            remark=$(echo "$line" | sed 's/^#.*备注: *//')
+        # 检查是否是endpoints开始
+        elif [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
+            in_endpoint=true
+            listen_port=""
+            remote_addr=""
+            rule_start_line=$line_num
+        # 检查listen行
+        elif [[ "$line" =~ ^listen.*= ]] && [ "$in_endpoint" = true ]; then
+            listen_port=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查remote行
+        elif [[ "$line" =~ ^remote.*= ]] && [ "$in_endpoint" = true ]; then
+            remote_addr=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+
+            # 保存规则信息
+            rule_info+=("$listen_port|$remote_addr|$remark")
+            rule_lines+=("$rule_start_line")
+
+            # 显示这条规则
+            printf " [%s] %-15s → %-35s (%s)\n" "${#rule_info[@]}" "$listen_port" "$remote_addr" "$remark"
+
+            # 重置变量
+            in_endpoint=false
+            remark=""
+        fi
+
+        index=$((index + 1))
+    done < /root/realm/config.toml
+
+    if [ ${#rule_info[@]} -eq 0 ]; then
+        echo "没有发现任何转发规则。"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo ""
+    echo "—————————————————————————————————————————————————————————————————"
+    read -e -p "请输入要删除的规则编号 (1-${#rule_info[@]}) 或按回车返回: " choice
+
+    if [ -z "$choice" ]; then
+        return
+    fi
+
+    # 验证输入
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#rule_info[@]} ]; then
+        echo "❌ 无效的规则编号"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    # 获取选中规则的信息
+    local selected_rule="${rule_info[$((choice-1))]}"
+    local listen_part=$(echo "$selected_rule" | cut -d'|' -f1)
+    local remote_part=$(echo "$selected_rule" | cut -d'|' -f2)
+    local remark_part=$(echo "$selected_rule" | cut -d'|' -f3)
+
+    echo ""
+    echo "确认删除以下规则？"
+    echo "  监听端口: $listen_part"
+    echo "  转发地址: $remote_part"
+    echo "  备注: $remark_part"
+    echo ""
+    read -e -p "确认删除? (y/N): " confirm
+
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        # 备份配置文件
+        cp /root/realm/config.toml /root/realm/config.toml.backup.$(date +%Y%m%d_%H%M%S)
+
+        # 删除规则（删除整个endpoints块）
+        # 创建临时文件
+        local temp_file="/tmp/realm_config_temp.toml"
+        local skip_block=false
+        local current_listen=""
+
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
+                skip_block=false
+                current_listen=""
+                # 开始一个新的endpoints块，先保存这一行
+                echo "$line" >> "$temp_file"
+            elif [[ "$line" =~ ^listen.*= ]] && [ "$skip_block" = false ]; then
+                current_listen=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+                if [ "$current_listen" = "$listen_part" ]; then
+                    # 找到要删除的规则，开始跳过
+                    skip_block=true
+                    # 删除刚才添加的[[endpoints]]行
+                    head -n -1 "$temp_file" > "$temp_file.tmp" && mv "$temp_file.tmp" "$temp_file"
+                else
+                    echo "$line" >> "$temp_file"
+                fi
+            elif [ "$skip_block" = true ]; then
+                # 跳过当前块的所有行，直到遇到下一个[[endpoints]]或文件结束
+                if [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
+                    skip_block=false
+                    echo "$line" >> "$temp_file"
+                fi
+                # 其他行都跳过
+            else
+                echo "$line" >> "$temp_file"
+            fi
+        done < /root/realm/config.toml
+
+        # 替换原配置文件
+        mv "$temp_file" /root/realm/config.toml
+
+        echo "✅ 规则删除成功"
+        echo "✅ 原配置已备份"
+
+        # 重启服务
+        systemctl restart realm 2>/dev/null
+        echo "✅ 服务已重启"
+    else
+        echo "已取消删除"
+    fi
+
+    read -e -p "按回车键返回..."
+}
+
 # 启动服务
 start_service() {
     echo "启动Realm服务..."
@@ -489,18 +637,19 @@ uninstall_realm() {
 # 主循环
 while true; do
     show_menu
-    read -e -p "请选择 [0-9]: " choice
+    read -e -p "请选择 [0-10]: " choice
 
     case $choice in
         1) install_realm ;;
         2) add_forward ;;
         3) show_all_conf ;;
-        4) start_service ;;
-        5) stop_service ;;
-        6) restart_service ;;
-        7) configure_proxy_protocol ;;
-        8) change_github_proxy ;;
-        9) uninstall_realm ;;
+        4) delete_forward ;;
+        5) start_service ;;
+        6) stop_service ;;
+        7) restart_service ;;
+        8) configure_proxy_protocol ;;
+        9) change_github_proxy ;;
+        10) uninstall_realm ;;
         0)
             echo "退出脚本"
             exit 0
