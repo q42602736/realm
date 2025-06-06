@@ -624,15 +624,24 @@ delete_forward() {
 
     echo ""
     echo "⚠️  确认删除以下规则？"
+    echo "—————————————————————————————————————————————————————————"
     echo "   📍 监听端口: $listen_part"
     echo "   🎯 转发地址: $remote_part"
-    echo "   📝 备注: $remark_part"
+    echo "   📝 备注信息: ${remark_part:-无备注}"
+    if [ -n "${transports[$selected_index]}" ]; then
+        echo "   🌐 传输协议: ${transports[$selected_index]}"
+    else
+        echo "   🌐 传输协议: TCP (默认)"
+    fi
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+    echo "⚠️  警告：删除后需要重启服务才能生效！"
     echo ""
     echo "请选择操作："
     echo " [1] 确认删除"
     echo " [0] 取消删除 (默认)"
     echo ""
-    read -e -p "请选择 (1/0，默认0): " confirm
+    read -e -p "请输入数字选择 (1/0，默认0): " confirm
 
     # 默认为取消删除
     if [ -z "$confirm" ]; then
@@ -647,14 +656,30 @@ delete_forward() {
         # 重新生成配置文件
         local temp_file="/tmp/realm_new_config.toml"
 
-        # 先写入network部分
-        cat > "$temp_file" << 'EOF'
+        # 读取当前的PROXY Protocol配置
+        local current_send_proxy=$(grep "send_proxy = " "$CONFIG_FILE" | head -1 | grep -o 'true\|false')
+        local current_accept_proxy=$(grep "accept_proxy = " "$CONFIG_FILE" | head -1 | grep -o 'true\|false')
+        local current_proxy_version=$(grep "send_proxy_version = " "$CONFIG_FILE" | head -1 | grep -o '[0-9]')
+
+        # 如果没有找到配置，使用默认值
+        if [ -z "$current_send_proxy" ]; then
+            current_send_proxy="false"
+        fi
+        if [ -z "$current_accept_proxy" ]; then
+            current_accept_proxy="false"
+        fi
+        if [ -z "$current_proxy_version" ]; then
+            current_proxy_version="2"
+        fi
+
+        # 先写入network部分，保持原有的PROXY Protocol配置
+        cat > "$temp_file" << EOF
 [network]
 no_tcp = false
 use_udp = true
-send_proxy = true
-accept_proxy = true
-send_proxy_version = 2
+send_proxy = $current_send_proxy
+accept_proxy = $current_accept_proxy
+send_proxy_version = $current_proxy_version
 tcp_timeout = 10
 tcp_nodelay = true
 
@@ -849,14 +874,28 @@ repair_config_file() {
 
     echo "找到 ${#listen_ports[@]} 个规则，正在重新生成配置..."
 
-    # 重新生成配置文件
-    cat > "$CONFIG_FILE" << 'EOF'
+    # 读取当前的PROXY Protocol配置（如果存在）
+    local current_send_proxy="true"
+    local current_accept_proxy="true"
+    local current_proxy_version="2"
+
+    if [ -f "${CONFIG_FILE}.backup."* ]; then
+        local latest_backup=$(ls -t "${CONFIG_FILE}.backup."* 2>/dev/null | head -1)
+        if [ -n "$latest_backup" ]; then
+            current_send_proxy=$(grep "send_proxy = " "$latest_backup" | head -1 | grep -o 'true\|false' || echo "true")
+            current_accept_proxy=$(grep "accept_proxy = " "$latest_backup" | head -1 | grep -o 'true\|false' || echo "true")
+            current_proxy_version=$(grep "send_proxy_version = " "$latest_backup" | head -1 | grep -o '[0-9]' || echo "2")
+        fi
+    fi
+
+    # 重新生成配置文件，保持原有的PROXY Protocol配置
+    cat > "$CONFIG_FILE" << EOF
 [network]
 no_tcp = false
 use_udp = true
-send_proxy = true
-accept_proxy = true
-send_proxy_version = 2
+send_proxy = $current_send_proxy
+accept_proxy = $current_accept_proxy
+send_proxy_version = $current_proxy_version
 tcp_timeout = 10
 tcp_nodelay = true
 
@@ -1842,7 +1881,7 @@ configure_complete_ws_tunnel() {
     fi
 
     # 获取端口配置
-    read -e -p "📍 A机器监听端口: " listen_ports
+    read -e -p "📍 A机器监听端口 (如: 29731 29732): " listen_ports
     if [ -z "$listen_ports" ]; then
         listen_ports="29731"
     fi
