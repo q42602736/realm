@@ -167,15 +167,21 @@ show_menu() {
     echo "   12. 配置 PROXY Protocol"
     echo "   13. 查看 PROXY Protocol 状态"
     echo "—————————————————————————————————————————————————————————"
+    echo " 🌐 传输层配置"
+    echo "   14. 配置 WebSocket (WS)"
+    echo "   15. 配置 TLS 加密"
+    echo "   16. 配置 WebSocket over TLS (WSS)"
+    echo "   17. 查看传输层配置"
+    echo "—————————————————————————————————————————————————————————"
     echo " 📊 日志监控"
-    echo "   14. 查看实时日志"
-    echo "   15. 查看错误日志"
-    echo "   16. 查看连接统计"
+    echo "   18. 查看实时日志"
+    echo "   19. 查看错误日志"
+    echo "   20. 查看连接统计"
     echo "—————————————————————————————————————————————————————————"
     echo " 🛠️  工具功能"
-    echo "   17. 测试网络连通性"
-    echo "   18. 备份配置文件"
-    echo "   19. 恢复配置文件"
+    echo "   21. 测试网络连通性"
+    echo "   22. 备份配置文件"
+    echo "   23. 恢复配置文件"
     echo "—————————————————————————————————————————————————————————"
     echo "   0. 退出脚本"
     echo "—————————————————————————————————————————————————————————"
@@ -728,6 +734,79 @@ EOF
     esac
 }
 
+# 修复配置文件
+repair_config_file() {
+    echo "🔧 正在修复配置文件..."
+
+    # 备份损坏的配置
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.broken.$(date +%Y%m%d_%H%M%S)"
+    echo "✅ 损坏的配置已备份"
+
+    # 解析现有的规则
+    declare -a listen_ports=()
+    declare -a remote_addrs=()
+    declare -a remarks=()
+    declare -a transports=()
+
+    local current_remark=""
+    local current_transport=""
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^#.*备注: ]]; then
+            current_remark=$(echo "$line" | sed 's/^#.*备注: *//')
+        elif [[ "$line" =~ ^listen.*= ]]; then
+            local listen_port=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+            if [ -n "$listen_port" ]; then
+                listen_ports+=("$listen_port")
+                remarks+=("${current_remark:-}")
+                current_remark=""
+            fi
+        elif [[ "$line" =~ ^remote.*= ]]; then
+            local remote_addr=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+            if [ -n "$remote_addr" ]; then
+                remote_addrs+=("$remote_addr")
+            fi
+        elif [[ "$line" =~ ^transport.*= ]]; then
+            local transport=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+            transports+=("${transport:-}")
+        fi
+    done < "$CONFIG_FILE"
+
+    echo "找到 ${#listen_ports[@]} 个规则，正在重新生成配置..."
+
+    # 重新生成配置文件
+    cat > "$CONFIG_FILE" << 'EOF'
+[network]
+no_tcp = false
+use_udp = true
+send_proxy = true
+accept_proxy = true
+send_proxy_version = 2
+tcp_timeout = 10
+tcp_nodelay = true
+
+EOF
+
+    # 重新添加所有规则
+    for ((i=0; i<${#listen_ports[@]}; i++)); do
+        cat >> "$CONFIG_FILE" << EOF
+[[endpoints]]
+# 备注: ${remarks[$i]}
+listen = "${listen_ports[$i]}"
+remote = "${remote_addrs[$i]}"
+EOF
+
+        # 如果有transport配置，添加它
+        if [ -n "${transports[$i]}" ]; then
+            echo "transport = \"${transports[$i]}\"" >> "$CONFIG_FILE"
+        fi
+
+        echo "" >> "$CONFIG_FILE"
+    done
+
+    echo "✅ 配置文件已修复"
+}
+
 # 启动服务
 start_service() {
     clear
@@ -954,7 +1033,766 @@ show_proxy_status() {
     read -e -p "按回车键返回..."
 }
 
-# 查看实时日志
+# 配置WebSocket传输
+configure_websocket() {
+    clear
+    echo "🌐 配置 WebSocket 传输"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "❌ 配置文件不存在，请先安装Realm"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo "WebSocket配置说明："
+    echo "• 客户端接收TCP连接，通过WebSocket发送到服务端"
+    echo "• 服务端接收WebSocket连接，转发为TCP连接"
+    echo "• 可以穿透HTTP代理和防火墙"
+    echo ""
+    echo "—————————————————————————————————————————————————————————"
+
+    # 选择配置类型
+    echo "请选择配置类型："
+    echo " [1] 客户端配置 (TCP → WebSocket)"
+    echo " [2] 服务端配置 (WebSocket → TCP)"
+    echo " [0] 返回"
+    echo ""
+    read -e -p "请选择: " ws_type
+
+    case $ws_type in
+        1)
+            configure_websocket_client
+            ;;
+        2)
+            configure_websocket_server
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "❌ 无效选择"
+            read -e -p "按回车键返回..."
+            ;;
+    esac
+}
+
+# 配置WebSocket客户端
+configure_websocket_client() {
+    echo ""
+    echo "🔧 配置WebSocket客户端"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "📍 本地监听端口: " local_port
+    if [ -z "$local_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🌐 WebSocket服务器地址: " ws_server
+    if [ -z "$ws_server" ]; then
+        echo "❌ 服务器地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 WebSocket服务器端口: " ws_port
+    if [ -z "$ws_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    if [ -z "$http_host" ]; then
+        echo "❌ HTTP Host不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
+    if [ -z "$ws_path" ]; then
+        ws_path="/ws"
+    fi
+
+    read -e -p "📝 备注信息 (可选): " remark
+
+    # 添加WebSocket客户端配置
+    echo "" >> "$CONFIG_FILE"
+    echo "[[endpoints]]" >> "$CONFIG_FILE"
+    echo "# 备注: $remark (WebSocket客户端)" >> "$CONFIG_FILE"
+    echo "listen = \"0.0.0.0:$local_port\"" >> "$CONFIG_FILE"
+    echo "remote = \"$ws_server:$ws_port\"" >> "$CONFIG_FILE"
+    echo "transport = \"ws;host=$http_host;path=$ws_path\"" >> "$CONFIG_FILE"
+
+    echo ""
+    echo "✅ WebSocket客户端配置已添加："
+    echo "   📍 监听: 0.0.0.0:$local_port"
+    echo "   🎯 连接: $ws_server:$ws_port"
+    echo "   🌐 Host: $http_host"
+    echo "   📂 路径: $ws_path"
+    echo ""
+
+    restart_service_prompt
+}
+
+# 配置WebSocket服务端
+configure_websocket_server() {
+    echo ""
+    echo "🔧 配置WebSocket服务端"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "📍 WebSocket监听端口: " ws_port
+    if [ -z "$ws_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🎯 转发目标地址: " target_host
+    if [ -z "$target_host" ]; then
+        echo "❌ 目标地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 转发目标端口: " target_port
+    if [ -z "$target_port" ]; then
+        echo "❌ 目标端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    if [ -z "$http_host" ]; then
+        echo "❌ HTTP Host不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
+    if [ -z "$ws_path" ]; then
+        ws_path="/ws"
+    fi
+
+    read -e -p "📝 备注信息 (可选): " remark
+
+    # 处理IPv6地址格式
+    if [[ "$target_host" == *:*:* ]] && [[ "$target_host" != \[*\] ]]; then
+        target_format="[$target_host]:$target_port"
+    else
+        target_format="$target_host:$target_port"
+    fi
+
+    # 添加WebSocket服务端配置
+    echo "" >> "$CONFIG_FILE"
+    echo "[[endpoints]]" >> "$CONFIG_FILE"
+    echo "# 备注: $remark (WebSocket服务端)" >> "$CONFIG_FILE"
+    echo "listen = \"0.0.0.0:$ws_port\"" >> "$CONFIG_FILE"
+    echo "remote = \"$target_format\"" >> "$CONFIG_FILE"
+    echo "transport = \"ws;host=$http_host;path=$ws_path\"" >> "$CONFIG_FILE"
+
+    echo ""
+    echo "✅ WebSocket服务端配置已添加："
+    echo "   📍 监听: 0.0.0.0:$ws_port"
+    echo "   🎯 转发: $target_format"
+    echo "   🌐 Host: $http_host"
+    echo "   📂 路径: $ws_path"
+    echo ""
+
+    restart_service_prompt
+}
+
+# 配置TLS传输
+configure_tls() {
+    clear
+    echo "🔐 配置 TLS 传输"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "❌ 配置文件不存在，请先安装Realm"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo "TLS配置说明："
+    echo "• 客户端接收TCP连接，通过TLS加密发送到服务端"
+    echo "• 服务端接收TLS连接，解密后转发为TCP连接"
+    echo "• 提供传输层加密保护"
+    echo ""
+    echo "—————————————————————————————————————————————————————————"
+
+    # 选择配置类型
+    echo "请选择配置类型："
+    echo " [1] 客户端配置 (TCP → TLS)"
+    echo " [2] 服务端配置 (TLS → TCP)"
+    echo " [0] 返回"
+    echo ""
+    read -e -p "请选择: " tls_type
+
+    case $tls_type in
+        1)
+            configure_tls_client
+            ;;
+        2)
+            configure_tls_server
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "❌ 无效选择"
+            read -e -p "按回车键返回..."
+            ;;
+    esac
+}
+
+# 配置TLS客户端
+configure_tls_client() {
+    echo ""
+    echo "🔧 配置TLS客户端"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "📍 本地监听端口: " local_port
+    if [ -z "$local_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🌐 TLS服务器地址: " tls_server
+    if [ -z "$tls_server" ]; then
+        echo "❌ 服务器地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 TLS服务器端口: " tls_port
+    if [ -z "$tls_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🏷️  SNI (服务器名称，如: example.com): " sni
+    if [ -z "$sni" ]; then
+        echo "❌ SNI不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔒 跳过证书验证? (y/N): " insecure
+    read -e -p "📝 备注信息 (可选): " remark
+
+    # 构建transport配置
+    local transport_config="tls;sni=$sni"
+    if [[ "$insecure" =~ ^[Yy]$ ]]; then
+        transport_config="$transport_config;insecure"
+    fi
+
+    # 添加TLS客户端配置
+    echo "" >> "$CONFIG_FILE"
+    echo "[[endpoints]]" >> "$CONFIG_FILE"
+    echo "# 备注: $remark (TLS客户端)" >> "$CONFIG_FILE"
+    echo "listen = \"0.0.0.0:$local_port\"" >> "$CONFIG_FILE"
+    echo "remote = \"$tls_server:$tls_port\"" >> "$CONFIG_FILE"
+    echo "transport = \"$transport_config\"" >> "$CONFIG_FILE"
+
+    echo ""
+    echo "✅ TLS客户端配置已添加："
+    echo "   📍 监听: 0.0.0.0:$local_port"
+    echo "   🎯 连接: $tls_server:$tls_port"
+    echo "   🏷️  SNI: $sni"
+    if [[ "$insecure" =~ ^[Yy]$ ]]; then
+        echo "   🔒 证书验证: 已跳过"
+    fi
+    echo ""
+
+    restart_service_prompt
+}
+
+# 配置TLS服务端
+configure_tls_server() {
+    echo ""
+    echo "🔧 配置TLS服务端"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "📍 TLS监听端口: " tls_port
+    if [ -z "$tls_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🎯 转发目标地址: " target_host
+    if [ -z "$target_host" ]; then
+        echo "❌ 目标地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 转发目标端口: " target_port
+    if [ -z "$target_port" ]; then
+        echo "❌ 目标端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo ""
+    echo "证书配置选项："
+    echo " [1] 使用现有证书文件"
+    echo " [2] 生成自签名证书"
+    echo ""
+    read -e -p "请选择: " cert_option
+
+    local transport_config="tls"
+
+    case $cert_option in
+        1)
+            read -e -p "🔑 私钥文件路径: " key_path
+            if [ -z "$key_path" ]; then
+                echo "❌ 私钥路径不能为空"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            read -e -p "📜 证书文件路径: " cert_path
+            if [ -z "$cert_path" ]; then
+                echo "❌ 证书路径不能为空"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            # 验证文件是否存在
+            if [ ! -f "$key_path" ]; then
+                echo "❌ 私钥文件不存在: $key_path"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            if [ ! -f "$cert_path" ]; then
+                echo "❌ 证书文件不存在: $cert_path"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            transport_config="$transport_config;cert=$cert_path;key=$key_path"
+            ;;
+        2)
+            read -e -p "🏷️  服务器名称 (CN): " server_name
+            if [ -z "$server_name" ]; then
+                echo "❌ 服务器名称不能为空"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            transport_config="$transport_config;servername=$server_name"
+            ;;
+        *)
+            echo "❌ 无效选择"
+            read -e -p "按回车键返回..."
+            return
+            ;;
+    esac
+
+    read -e -p "📝 备注信息 (可选): " remark
+
+    # 处理IPv6地址格式
+    if [[ "$target_host" == *:*:* ]] && [[ "$target_host" != \[*\] ]]; then
+        target_format="[$target_host]:$target_port"
+    else
+        target_format="$target_host:$target_port"
+    fi
+
+    # 添加TLS服务端配置
+    echo "" >> "$CONFIG_FILE"
+    echo "[[endpoints]]" >> "$CONFIG_FILE"
+    echo "# 备注: $remark (TLS服务端)" >> "$CONFIG_FILE"
+    echo "listen = \"0.0.0.0:$tls_port\"" >> "$CONFIG_FILE"
+    echo "remote = \"$target_format\"" >> "$CONFIG_FILE"
+    echo "transport = \"$transport_config\"" >> "$CONFIG_FILE"
+
+    echo ""
+    echo "✅ TLS服务端配置已添加："
+    echo "   📍 监听: 0.0.0.0:$tls_port"
+    echo "   🎯 转发: $target_format"
+    if [ "$cert_option" == "1" ]; then
+        echo "   🔑 私钥: $key_path"
+        echo "   📜 证书: $cert_path"
+    else
+        echo "   🏷️  服务器名: $server_name (自签名)"
+    fi
+    echo ""
+
+    restart_service_prompt
+}
+
+# 配置WSS (WebSocket over TLS)
+configure_wss() {
+    clear
+    echo "🔐🌐 配置 WebSocket over TLS (WSS)"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "❌ 配置文件不存在，请先安装Realm"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo "WSS配置说明："
+    echo "• 结合WebSocket和TLS的优势"
+    echo "• 提供加密的WebSocket连接"
+    echo "• 可以穿透HTTPS代理"
+    echo ""
+    echo "—————————————————————————————————————————————————————————"
+
+    # 选择配置类型
+    echo "请选择配置类型："
+    echo " [1] 客户端配置 (TCP → WSS)"
+    echo " [2] 服务端配置 (WSS → TCP)"
+    echo " [0] 返回"
+    echo ""
+    read -e -p "请选择: " wss_type
+
+    case $wss_type in
+        1)
+            configure_wss_client
+            ;;
+        2)
+            configure_wss_server
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo "❌ 无效选择"
+            read -e -p "按回车键返回..."
+            ;;
+    esac
+}
+
+# 配置WSS客户端
+configure_wss_client() {
+    echo ""
+    echo "🔧 配置WSS客户端"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "📍 本地监听端口: " local_port
+    if [ -z "$local_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🌐 WSS服务器地址: " wss_server
+    if [ -z "$wss_server" ]; then
+        echo "❌ 服务器地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 WSS服务器端口: " wss_port
+    if [ -z "$wss_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    if [ -z "$http_host" ]; then
+        echo "❌ HTTP Host不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
+    if [ -z "$ws_path" ]; then
+        ws_path="/ws"
+    fi
+
+    read -e -p "🏷️  SNI (如: example.com): " sni
+    if [ -z "$sni" ]; then
+        sni="$http_host"
+    fi
+
+    read -e -p "🔒 跳过证书验证? (y/N): " insecure
+    read -e -p "📝 备注信息 (可选): " remark
+
+    # 构建transport配置
+    local transport_config="ws;host=$http_host;path=$ws_path;tls;sni=$sni"
+    if [[ "$insecure" =~ ^[Yy]$ ]]; then
+        transport_config="$transport_config;insecure"
+    fi
+
+    # 添加WSS客户端配置
+    echo "" >> "$CONFIG_FILE"
+    echo "[[endpoints]]" >> "$CONFIG_FILE"
+    echo "# 备注: $remark (WSS客户端)" >> "$CONFIG_FILE"
+    echo "listen = \"0.0.0.0:$local_port\"" >> "$CONFIG_FILE"
+    echo "remote = \"$wss_server:$wss_port\"" >> "$CONFIG_FILE"
+    echo "transport = \"$transport_config\"" >> "$CONFIG_FILE"
+
+    echo ""
+    echo "✅ WSS客户端配置已添加："
+    echo "   📍 监听: 0.0.0.0:$local_port"
+    echo "   🎯 连接: $wss_server:$wss_port"
+    echo "   🌐 Host: $http_host"
+    echo "   📂 路径: $ws_path"
+    echo "   🏷️  SNI: $sni"
+    if [[ "$insecure" =~ ^[Yy]$ ]]; then
+        echo "   🔒 证书验证: 已跳过"
+    fi
+    echo ""
+
+    restart_service_prompt
+}
+
+# 配置WSS服务端
+configure_wss_server() {
+    echo ""
+    echo "🔧 配置WSS服务端"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    read -e -p "📍 WSS监听端口: " wss_port
+    if [ -z "$wss_port" ]; then
+        echo "❌ 端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🎯 转发目标地址: " target_host
+    if [ -z "$target_host" ]; then
+        echo "❌ 目标地址不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🔌 转发目标端口: " target_port
+    if [ -z "$target_port" ]; then
+        echo "❌ 目标端口不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "🏠 HTTP Host (如: example.com): " http_host
+    if [ -z "$http_host" ]; then
+        echo "❌ HTTP Host不能为空"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
+    if [ -z "$ws_path" ]; then
+        ws_path="/ws"
+    fi
+
+    echo ""
+    echo "证书配置选项："
+    echo " [1] 使用现有证书文件"
+    echo " [2] 生成自签名证书"
+    echo ""
+    read -e -p "请选择: " cert_option
+
+    local transport_config="ws;host=$http_host;path=$ws_path;tls"
+
+    case $cert_option in
+        1)
+            read -e -p "🔑 私钥文件路径: " key_path
+            if [ -z "$key_path" ]; then
+                echo "❌ 私钥路径不能为空"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            read -e -p "📜 证书文件路径: " cert_path
+            if [ -z "$cert_path" ]; then
+                echo "❌ 证书路径不能为空"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            # 验证文件是否存在
+            if [ ! -f "$key_path" ]; then
+                echo "❌ 私钥文件不存在: $key_path"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            if [ ! -f "$cert_path" ]; then
+                echo "❌ 证书文件不存在: $cert_path"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            transport_config="$transport_config;cert=$cert_path;key=$key_path"
+            ;;
+        2)
+            read -e -p "🏷️  服务器名称 (CN): " server_name
+            if [ -z "$server_name" ]; then
+                echo "❌ 服务器名称不能为空"
+                read -e -p "按回车键返回..."
+                return
+            fi
+
+            transport_config="$transport_config;servername=$server_name"
+            ;;
+        *)
+            echo "❌ 无效选择"
+            read -e -p "按回车键返回..."
+            return
+            ;;
+    esac
+
+    read -e -p "📝 备注信息 (可选): " remark
+
+    # 处理IPv6地址格式
+    if [[ "$target_host" == *:*:* ]] && [[ "$target_host" != \[*\] ]]; then
+        target_format="[$target_host]:$target_port"
+    else
+        target_format="$target_host:$target_port"
+    fi
+
+    # 添加WSS服务端配置
+    echo "" >> "$CONFIG_FILE"
+    echo "[[endpoints]]" >> "$CONFIG_FILE"
+    echo "# 备注: $remark (WSS服务端)" >> "$CONFIG_FILE"
+    echo "listen = \"0.0.0.0:$wss_port\"" >> "$CONFIG_FILE"
+    echo "remote = \"$target_format\"" >> "$CONFIG_FILE"
+    echo "transport = \"$transport_config\"" >> "$CONFIG_FILE"
+
+    echo ""
+    echo "✅ WSS服务端配置已添加："
+    echo "   📍 监听: 0.0.0.0:$wss_port"
+    echo "   🎯 转发: $target_format"
+    echo "   🌐 Host: $http_host"
+    echo "   📂 路径: $ws_path"
+    if [ "$cert_option" == "1" ]; then
+        echo "   🔑 私钥: $key_path"
+        echo "   📜 证书: $cert_path"
+    else
+        echo "   🏷️  服务器名: $server_name (自签名)"
+    fi
+    echo ""
+
+    restart_service_prompt
+}
+
+# 查看传输层配置
+show_transport_config() {
+    clear
+    echo "🌐 传输层配置状态"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "❌ 配置文件不存在"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo "📋 当前传输层配置："
+    echo ""
+    echo "序号 | 监听端口        | 转发地址                     | 传输类型     | 备注"
+    echo "—————————————————————————————————————————————————————————————————————————————————"
+
+    local index=1
+    local current_remark=""
+    local current_transport=""
+    local in_endpoint=false
+    local found_transport=false
+
+    while IFS= read -r line; do
+        # 检查备注行
+        if [[ "$line" =~ ^#.*备注: ]]; then
+            current_remark=$(echo "$line" | sed 's/^#.*备注: *//')
+        # 检查endpoints开始
+        elif [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
+            in_endpoint=true
+            current_transport=""
+        # 检查listen行
+        elif [[ "$line" =~ ^listen.*= ]] && [ "$in_endpoint" = true ]; then
+            local listen_port=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+            # 读取下一行获取remote
+            read -r next_line
+            if [[ "$next_line" =~ ^remote.*= ]]; then
+                local remote_addr=$(echo "$next_line" | grep -o '"[^"]*"' | tr -d '"')
+
+                # 读取下一行检查是否有transport
+                read -r transport_line
+                if [[ "$transport_line" =~ ^transport.*= ]]; then
+                    current_transport=$(echo "$transport_line" | grep -o '"[^"]*"' | tr -d '"')
+
+                    # 解析传输类型
+                    local transport_type="TCP"
+                    if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+                        transport_type="WSS"
+                    elif [[ "$current_transport" == *"ws"* ]]; then
+                        transport_type="WebSocket"
+                    elif [[ "$current_transport" == *"tls"* ]]; then
+                        transport_type="TLS"
+                    fi
+
+                    printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$listen_port" "$remote_addr" "$transport_type" "$current_remark"
+                    found_transport=true
+                else
+                    # 没有transport配置，回退一行
+                    printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$listen_port" "$remote_addr" "TCP" "$current_remark"
+                fi
+
+                index=$((index + 1))
+
+                # 重置状态
+                in_endpoint=false
+                current_remark=""
+                current_transport=""
+            fi
+        fi
+    done < "$CONFIG_FILE"
+
+    if [ "$found_transport" = false ] && [ $index -eq 1 ]; then
+        echo "暂无传输层配置"
+    fi
+
+    echo "—————————————————————————————————————————————————————————————————————————————————"
+    echo ""
+    echo "📖 传输类型说明："
+    echo "  • TCP: 普通TCP转发"
+    echo "  • WebSocket: WebSocket协议，可穿透HTTP代理"
+    echo "  • TLS: TLS加密传输"
+    echo "  • WSS: WebSocket over TLS，加密的WebSocket"
+    echo ""
+
+    read -e -p "按回车键返回..."
+}
+
+# 重启服务提示
+restart_service_prompt() {
+    read -e -p "是否立即重启服务以应用配置? (Y/n): " restart_confirm
+    if [[ ! "$restart_confirm" =~ ^[Nn]$ ]]; then
+        systemctl restart realm
+        if systemctl is-active --quiet realm; then
+            echo "✅ 服务重启成功"
+        else
+            echo "❌ 服务重启失败，请检查配置"
+            echo ""
+            echo "错误日志："
+            journalctl -u realm --no-pager -l | tail -5
+        fi
+    fi
+
+    read -e -p "按回车键返回..."
+}
+
 show_realtime_logs() {
     clear
     echo "📊 Realm 实时日志监控"
@@ -1215,7 +2053,7 @@ restore_config() {
 # 主循环
 while true; do
     show_menu
-    read -e -p "请选择功能 [0-19]: " choice
+    read -e -p "请选择功能 [0-23]: " choice
 
     # 去掉输入中的空格
     choice=$(echo $choice | tr -d '[:space:]')
@@ -1234,12 +2072,16 @@ while true; do
         11) show_service_status ;;
         12) configure_proxy_protocol ;;
         13) show_proxy_status ;;
-        14) show_realtime_logs ;;
-        15) show_error_logs ;;
-        16) show_connection_stats ;;
-        17) test_network_connectivity ;;
-        18) backup_config ;;
-        19) restore_config ;;
+        14) configure_websocket ;;
+        15) configure_tls ;;
+        16) configure_wss ;;
+        17) show_transport_config ;;
+        18) show_realtime_logs ;;
+        19) show_error_logs ;;
+        20) show_connection_stats ;;
+        21) test_network_connectivity ;;
+        22) backup_config ;;
+        23) restore_config ;;
         0)
             clear
             echo ""
@@ -1262,7 +2104,7 @@ while true; do
         *)
             echo ""
             echo "❌ 无效选项: $choice"
-            echo "请输入 0-19 之间的数字"
+            echo "请输入 0-23 之间的数字"
             sleep 2
             ;;
     esac
