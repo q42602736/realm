@@ -182,6 +182,7 @@ show_menu() {
     echo "   21. 测试网络连通性"
     echo "   22. 备份配置文件"
     echo "   23. 恢复配置文件"
+    echo "   24. 更新脚本"
     echo "—————————————————————————————————————————————————————————"
     echo "   0. 退出脚本"
     echo "—————————————————————————————————————————————————————————"
@@ -2050,10 +2051,124 @@ restore_config() {
     read -e -p "按回车键返回..."
 }
 
+# 更新脚本
+update_script() {
+    clear
+    echo "🔄 更新 Realm 管理脚本"
+    echo "—————————————————————————————————————————————————————————"
+    echo ""
+
+    # 脚本信息
+    local SCRIPT_URL="https://raw.githubusercontent.com/q42602736/realm/main/install.sh"
+    local SCRIPT_NAME="realm-manager.sh"
+    local CURRENT_SCRIPT="$0"
+
+    echo "📋 更新信息："
+    echo "  🔗 源地址: $SCRIPT_URL"
+    echo "  📁 当前脚本: $CURRENT_SCRIPT"
+    echo ""
+
+    # 如果还没有选择代理，先选择
+    if [ -z "$SELECTED_PROXY" ]; then
+        echo "🚀 选择下载加速方式："
+        select_github_proxy
+    fi
+
+    echo "🔍 检查更新..."
+
+    # 构建下载URL
+    local download_url=$(build_download_url "$SCRIPT_URL")
+
+    # 下载新脚本到临时文件
+    local temp_script="/tmp/realm-manager-new.sh"
+
+    echo "📥 正在下载最新版本..."
+    echo "   下载地址: $download_url"
+
+    if wget --progress=bar:force -O "$temp_script" "$download_url" 2>&1; then
+        echo ""
+        echo "✅ 下载成功"
+
+        # 验证下载的文件
+        if [ -f "$temp_script" ] && [ -s "$temp_script" ]; then
+            # 检查文件是否为有效的shell脚本
+            if head -1 "$temp_script" | grep -q "#!/bin/bash"; then
+                echo "✅ 脚本文件验证成功"
+
+                # 显示文件信息
+                local new_size=$(ls -lh "$temp_script" | awk '{print $5}')
+                local current_size=$(ls -lh "$CURRENT_SCRIPT" | awk '{print $5}')
+
+                echo ""
+                echo "📊 文件对比："
+                echo "  当前版本大小: $current_size"
+                echo "  新版本大小: $new_size"
+                echo ""
+
+                # 确认更新
+                echo "⚠️  确认更新脚本？"
+                echo "   • 当前脚本将被备份"
+                echo "   • 新脚本将替换当前脚本"
+                echo "   • 脚本将自动重启"
+                echo ""
+                read -e -p "确认更新? (输入 'YES' 确认): " confirm
+
+                if [ "$confirm" = "YES" ]; then
+                    # 备份当前脚本
+                    local backup_script="${CURRENT_SCRIPT}.backup.$(date +%Y%m%d_%H%M%S)"
+                    cp "$CURRENT_SCRIPT" "$backup_script"
+                    echo "✅ 当前脚本已备份到: $backup_script"
+
+                    # 替换脚本
+                    cp "$temp_script" "$CURRENT_SCRIPT"
+                    chmod +x "$CURRENT_SCRIPT"
+
+                    echo "✅ 脚本更新成功"
+                    echo ""
+                    echo "🔄 正在重启脚本..."
+                    sleep 2
+
+                    # 清理临时文件
+                    rm -f "$temp_script"
+
+                    # 重新执行脚本
+                    exec "$CURRENT_SCRIPT"
+                else
+                    echo "❌ 已取消更新"
+                    rm -f "$temp_script"
+                fi
+            else
+                echo "❌ 下载的文件不是有效的shell脚本"
+                rm -f "$temp_script"
+            fi
+        else
+            echo "❌ 下载的文件无效或为空"
+            rm -f "$temp_script"
+        fi
+    else
+        echo ""
+        echo "❌ 下载失败"
+        echo ""
+        echo "可能的原因："
+        echo "• 网络连接问题"
+        echo "• GitHub访问受限"
+        echo "• 代理服务器问题"
+        echo ""
+        echo "建议："
+        echo "1. 检查网络连接"
+        echo "2. 尝试更换GitHub代理"
+        echo "3. 稍后再试"
+
+        rm -f "$temp_script"
+    fi
+
+    read -e -p "按回车键返回..."
+}
+
 # 主循环
 while true; do
     show_menu
-    read -e -p "请选择功能 [0-23]: " choice
+    read -e -p "请选择功能 [0-24]: " choice
 
     # 去掉输入中的空格
     choice=$(echo $choice | tr -d '[:space:]')
@@ -2082,6 +2197,7 @@ while true; do
         21) test_network_connectivity ;;
         22) backup_config ;;
         23) restore_config ;;
+        24) update_script ;;
         0)
             clear
             echo ""
@@ -2092,10 +2208,20 @@ while true; do
             echo "   • 连接数限制按真实IP生效"
             echo "   • 用户IP记录准确无误"
             echo ""
+            echo "🌐 传输层功能："
+            echo "   • WebSocket: 穿透HTTP代理和防火墙"
+            echo "   • TLS: 提供传输层加密保护"
+            echo "   • WSS: 加密的WebSocket连接"
+            echo ""
             echo "📞 如有问题，请检查："
             echo "   • A机器: send_proxy=true, accept_proxy=false"
             echo "   • B机器: send_proxy=true, accept_proxy=true"
             echo "   • XrayR: 启用PROXY Protocol接收"
+            echo ""
+            echo "🔄 脚本更新："
+            echo "   • 使用菜单选项24可以更新到最新版本"
+            echo "   • 支持GitHub加速下载"
+            echo "   • 自动备份当前版本"
             echo ""
             echo "再见！👋"
             echo ""
@@ -2104,7 +2230,7 @@ while true; do
         *)
             echo ""
             echo "❌ 无效选项: $choice"
-            echo "请输入 0-23 之间的数字"
+            echo "请输入 0-24 之间的数字"
             sleep 2
             ;;
     esac
