@@ -9,6 +9,76 @@ stty erase "^?"
 SELECTED_PROXY=""
 CONFIG_FILE="/root/realm/config.toml"
 
+# 检查并安装网络工具
+check_and_install_nettools() {
+    if ! command -v netstat >/dev/null 2>&1; then
+        echo "🔍 检测到netstat命令不存在，正在安装网络工具..."
+
+        # 检测系统类型并安装相应的包
+        if command -v apt >/dev/null 2>&1; then
+            # Debian/Ubuntu系统
+            apt update >/dev/null 2>&1
+            if apt install -y net-tools >/dev/null 2>&1; then
+                echo "✅ 网络工具安装成功"
+                return 0
+            else
+                echo "⚠️  网络工具安装失败，将使用ss命令替代"
+                return 1
+            fi
+        elif command -v yum >/dev/null 2>&1; then
+            # CentOS/RHEL系统
+            if yum install -y net-tools >/dev/null 2>&1; then
+                echo "✅ 网络工具安装成功"
+                return 0
+            else
+                echo "⚠️  网络工具安装失败，将使用ss命令替代"
+                return 1
+            fi
+        elif command -v dnf >/dev/null 2>&1; then
+            # Fedora系统
+            if dnf install -y net-tools >/dev/null 2>&1; then
+                echo "✅ 网络工具安装成功"
+                return 0
+            else
+                echo "⚠️  网络工具安装失败，将使用ss命令替代"
+                return 1
+            fi
+        else
+            echo "⚠️  无法识别系统类型，将使用ss命令替代"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# 智能网络状态检查函数
+smart_netstat() {
+    local args="$1"
+
+    if command -v netstat >/dev/null 2>&1; then
+        netstat $args
+    elif command -v ss >/dev/null 2>&1; then
+        # 将netstat参数转换为ss参数
+        case "$args" in
+            "-tln")
+                ss -tln
+                ;;
+            "-tlnp")
+                ss -tlnp
+                ;;
+            "-an")
+                ss -an
+                ;;
+            *)
+                ss $args
+                ;;
+        esac
+    else
+        echo "❌ 网络检查工具不可用"
+        return 1
+    fi
+}
+
 # GitHub加速代理列表（已验证可用）
 declare -A GITHUB_PROXIES=(
     ["1"]="https://hub.gitmirror.com/"
@@ -377,11 +447,15 @@ add_forward() {
 
     # 检查端口是否已被占用
     echo "🔍 检查端口 $local_port 可用性..."
-    if netstat -tln | grep ":$local_port " >/dev/null 2>&1; then
+
+    # 确保网络工具可用
+    check_and_install_nettools >/dev/null 2>&1
+
+    if smart_netstat "-tln" | grep ":$local_port " >/dev/null 2>&1; then
         echo "⚠️  警告：端口 $local_port 已被占用"
         echo ""
         echo "当前占用端口 $local_port 的进程："
-        netstat -tlnp | grep ":$local_port " 2>/dev/null || echo "无法获取进程信息"
+        smart_netstat "-tlnp" | grep ":$local_port " 2>/dev/null || echo "无法获取进程信息"
         echo ""
         read -e -p "是否继续使用此端口? (y/N): " continue_confirm
         if [[ ! "$continue_confirm" =~ ^[Yy]$ ]]; then
@@ -1009,7 +1083,11 @@ show_service_status() {
     # 显示端口监听
     echo "📡 端口监听状态："
     echo "—————————————————————————————————————————————————————————"
-    netstat -tlnp | grep realm || echo "未发现realm监听端口"
+
+    # 确保网络工具可用
+    check_and_install_nettools >/dev/null 2>&1
+
+    smart_netstat "-tlnp" | grep realm || echo "未发现realm监听端口"
     echo ""
 
     # 显示进程信息
@@ -2590,24 +2668,38 @@ configure_reverse_dual_stack_tunnel() {
     echo ""
     echo "—————————————————————————————————————————————————————————"
 
-    echo "请提供以下信息："
-    echo ""
-
-    # 获取B机器IPv4信息
-    read -e -p "🌐 B机器IPv4地址: " b_machine_ipv4
-    if [ -z "$b_machine_ipv4" ]; then
-        echo "❌ B机器IPv4地址不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
-
-    # 检测当前机器类型
-    echo ""
+    # 先确认当前机器类型
     echo "请确认当前机器类型："
     echo " [1] A机器（国内服务器）"
     echo " [2] B机器（海外服务器）"
     echo ""
     read -e -p "当前机器是: " current_machine
+
+    if [ "$current_machine" != "1" ] && [ "$current_machine" != "2" ]; then
+        echo "❌ 无效选择"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo ""
+    echo "请提供以下信息："
+    echo ""
+
+    # 根据机器类型获取不同信息
+    local b_machine_ipv4=""
+    if [ "$current_machine" == "1" ]; then
+        # A机器需要输入B机器IPv4地址
+        read -e -p "🌐 B机器IPv4地址: " b_machine_ipv4
+        if [ -z "$b_machine_ipv4" ]; then
+            echo "❌ B机器IPv4地址不能为空"
+            read -e -p "按回车键返回..."
+            return
+        fi
+    else
+        # B机器不需要输入自己的IP，直接跳过
+        echo "💡 B机器配置：直接配置本机监听和转发"
+        b_machine_ipv4="localhost"  # 占位符，实际不使用
+    fi
 
     # 根据机器类型获取不同信息
     if [ "$current_machine" == "1" ]; then
@@ -3154,18 +3246,31 @@ show_connection_stats() {
 
     echo "📡 当前监听端口："
     echo ""
-    netstat -tlnp | grep realm || echo "未发现realm监听端口"
+
+    # 确保网络工具可用
+    check_and_install_nettools >/dev/null 2>&1
+
+    smart_netstat "-tlnp" | grep realm || echo "未发现realm监听端口"
     echo ""
 
     echo "🔗 当前连接数："
     echo ""
-    local connections=$(netstat -an | grep -E "ESTABLISHED.*:($(netstat -tlnp | grep realm | awk '{print $4}' | cut -d: -f2 | tr '\n' '|' | sed 's/|$//'))" | wc -l)
-    echo "  活跃连接数: $connections"
+    local realm_ports=$(smart_netstat "-tlnp" | grep realm | awk '{print $4}' | cut -d: -f2 | tr '\n' '|' | sed 's/|$//')
+    if [ -n "$realm_ports" ]; then
+        local connections=$(smart_netstat "-an" | grep -E "ESTABLISHED.*:($realm_ports)" | wc -l)
+        echo "  活跃连接数: $connections"
+    else
+        echo "  活跃连接数: 0 (未发现realm监听端口)"
+    fi
     echo ""
 
     echo "📊 连接详情："
     echo "—————————————————————————————————————————————————————————"
-    netstat -an | grep -E "ESTABLISHED.*:($(netstat -tlnp | grep realm | awk '{print $4}' | cut -d: -f2 | tr '\n' '|' | sed 's/|$//'))" | head -20
+    if [ -n "$realm_ports" ]; then
+        smart_netstat "-an" | grep -E "ESTABLISHED.*:($realm_ports)" | head -20
+    else
+        echo "无连接详情 (未发现realm监听端口)"
+    fi
     echo ""
 
     echo "💾 系统资源使用："
@@ -3225,12 +3330,15 @@ test_network_connectivity() {
 
     local listens=$(grep "listen =" "$CONFIG_FILE" | grep -o '"[^"]*"' | tr -d '"')
 
+    # 确保网络工具可用
+    check_and_install_nettools >/dev/null 2>&1
+
     while IFS= read -r listen; do
         if [ -n "$listen" ]; then
             local port=$(echo "$listen" | cut -d: -f2)
             echo -n "📡 测试本地端口 $port: "
 
-            if netstat -tln | grep ":$port " >/dev/null; then
+            if smart_netstat "-tln" | grep ":$port " >/dev/null; then
                 echo -e "\\033[0;32m✅ 监听中\\033[0m"
             else
                 echo -e "\\033[0;31m❌ 未监听\\033[0m"
