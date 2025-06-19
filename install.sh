@@ -9,6 +9,180 @@ stty erase "^?"
 SELECTED_PROXY=""
 CONFIG_FILE="/root/realm/config.toml"
 
+# WebSocket隧道伪装域名池
+FAKE_DOMAINS=(
+    # 科技公司
+    "www.microsoft.com"
+    "www.google.com"
+    "www.apple.com"
+    "www.amazon.com"
+    "www.meta.com"
+    "www.tesla.com"
+    "www.nvidia.com"
+    "www.intel.com"
+    "www.adobe.com"
+    "www.oracle.com"
+    "www.salesforce.com"
+    "www.ibm.com"
+
+    # 社交媒体
+    "www.facebook.com"
+    "www.twitter.com"
+    "www.instagram.com"
+    "www.linkedin.com"
+    "www.tiktok.com"
+    "www.snapchat.com"
+    "www.pinterest.com"
+    "www.reddit.com"
+    "www.discord.com"
+    "www.telegram.org"
+
+    # 视频平台
+    "www.youtube.com"
+    "www.netflix.com"
+    "www.twitch.tv"
+    "www.vimeo.com"
+    "www.hulu.com"
+    "www.disneyplus.com"
+    "www.primevideo.com"
+    "www.hbo.com"
+    "www.crunchyroll.com"
+
+    # 开发平台
+    "github.com"
+    "gitlab.com"
+    "www.stackoverflow.com"
+    "www.docker.com"
+    "www.npmjs.com"
+    "www.pypi.org"
+    "www.atlassian.com"
+    "www.jetbrains.com"
+
+    # 云服务
+    "www.cloudflare.com"
+    "aws.amazon.com"
+    "azure.microsoft.com"
+    "cloud.google.com"
+    "www.digitalocean.com"
+    "www.linode.com"
+    "www.vultr.com"
+    "www.heroku.com"
+
+    # 新闻媒体
+    "www.cnn.com"
+    "www.bbc.com"
+    "www.reuters.com"
+    "www.nytimes.com"
+    "www.wsj.com"
+    "www.bloomberg.com"
+    "www.theguardian.com"
+    "www.washingtonpost.com"
+
+    # 电商平台
+    "www.ebay.com"
+    "www.alibaba.com"
+    "www.shopify.com"
+    "www.etsy.com"
+    "www.walmart.com"
+    "www.target.com"
+    "www.bestbuy.com"
+
+    # 教育平台
+    "www.coursera.org"
+    "www.udemy.com"
+    "www.edx.org"
+    "www.khanacademy.org"
+    "www.duolingo.com"
+
+    # 其他知名网站
+    "www.wikipedia.org"
+    "www.medium.com"
+    "www.quora.com"
+    "www.spotify.com"
+    "www.zoom.us"
+    "www.slack.com"
+    "www.notion.so"
+    "www.figma.com"
+    "www.canva.com"
+    "www.dropbox.com"
+)
+
+# WebSocket路径池
+WS_PATHS=(
+    "/ws"
+    "/websocket"
+    "/socket"
+    "/api"
+    "/connect"
+    "/stream"
+    "/chat"
+    "/live"
+    "/watch"
+    "/gateway"
+    "/tunnel"
+    "/proxy"
+    "/bridge"
+    "/relay"
+    "/forward"
+    "/channel"
+    "/pipe"
+    "/link"
+    "/hub"
+    "/node"
+    "/endpoint"
+    "/service"
+    "/app"
+    "/client"
+    "/server"
+    "/data"
+    "/sync"
+    "/update"
+    "/notify"
+    "/event"
+    "/message"
+    "/signal"
+    "/feed"
+    "/status"
+    "/health"
+    "/ping"
+    "/echo"
+    "/test"
+    "/debug"
+    "/monitor"
+)
+
+# 随机选择伪装域名
+get_random_fake_domain() {
+    local domain_count=${#FAKE_DOMAINS[@]}
+    local random_index=$((RANDOM % domain_count))
+    echo "${FAKE_DOMAINS[$random_index]}"
+}
+
+# 随机选择WebSocket路径
+get_random_ws_path() {
+    local path_count=${#WS_PATHS[@]}
+    local random_index=$((RANDOM % path_count))
+    echo "${WS_PATHS[$random_index]}"
+}
+
+# 生成随机WebSocket传输配置
+generate_random_ws_transport() {
+    local fake_domain=$(get_random_fake_domain)
+    local ws_path=$(get_random_ws_path)
+    echo "ws;host=$fake_domain;path=$ws_path"
+}
+
+# 显示随机选择的伪装信息
+show_random_disguise_info() {
+    local transport="$1"
+    if [[ "$transport" == *"host="* ]]; then
+        local domain=$(echo "$transport" | sed 's/.*host=\([^;]*\).*/\1/')
+        local path=$(echo "$transport" | sed 's/.*path=\([^;]*\).*/\1/')
+        echo "  🎭 伪装域名: $domain"
+        echo "  📂 WebSocket路径: $path"
+    fi
+}
+
 # 检查并安装网络工具
 check_and_install_nettools() {
     if ! command -v netstat >/dev/null 2>&1; then
@@ -535,7 +709,7 @@ add_forward() {
 show_all_conf() {
     clear
     echo "📋 当前 Realm 转发规则"
-    echo "—————————————————————————————————————————————————————————"
+    echo "—————————————————————————————————————————————————————————————————————————————————"
     echo ""
 
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -546,11 +720,14 @@ show_all_conf() {
 
     local index=1
     local current_remark=""
+    local current_transport=""
     local in_endpoint=false
     local found_rules=false
+    local current_listen=""
+    local current_remote=""
 
-    echo "序号 | 监听端口        | 转发地址                     | 备注"
-    echo "—————————————————————————————————————————————————————————"
+    echo "序号 | 监听端口        | 转发地址                     | 传输协议     | 备注"
+    echo "—————————————————————————————————————————————————————————————————————————————————"
 
     while IFS= read -r line; do
         # 检查备注行
@@ -559,30 +736,110 @@ show_all_conf() {
         # 检查endpoints开始
         elif [[ "$line" =~ ^\[\[endpoints\]\] ]]; then
             in_endpoint=true
+            current_transport=""
+            current_listen=""
+            current_remote=""
         # 检查listen行
         elif [[ "$line" =~ ^listen.*= ]] && [ "$in_endpoint" = true ]; then
-            local listen_port=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
-            # 读取下一行获取remote
-            read -r next_line
-            if [[ "$next_line" =~ ^remote.*= ]]; then
-                local remote_addr=$(echo "$next_line" | grep -o '"[^"]*"' | tr -d '"')
+            current_listen=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查remote行
+        elif [[ "$line" =~ ^remote.*= ]] && [ "$in_endpoint" = true ]; then
+            current_remote=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查transport行
+        elif [[ "$line" =~ ^transport.*= ]] && [ "$in_endpoint" = true ]; then
+            current_transport=$(echo "$line" | grep -o '"[^"]*"' | tr -d '"')
+        # 检查空行或下一个section，表示当前endpoint结束
+        elif [[ "$line" =~ ^$ ]] || [[ "$line" =~ ^\[ ]] && [ "$in_endpoint" = true ]; then
+            if [ -n "$current_listen" ] && [ -n "$current_remote" ]; then
+                # 解析传输类型
+                local transport_type="TCP"
+                local transport_detail=""
 
-                printf " %-3s | %-15s | %-28s | %-15s\n" "$index" "$listen_port" "$remote_addr" "$current_remark"
-                index=$((index + 1))
+                if [ -n "$current_transport" ]; then
+                    if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+                        transport_type="WSS"
+                        # 提取host信息
+                        if [[ "$current_transport" == *"host="* ]]; then
+                            transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                            transport_type="WSS($transport_detail)"
+                        fi
+                    elif [[ "$current_transport" == *"ws"* ]]; then
+                        transport_type="WebSocket"
+                        # 提取host信息
+                        if [[ "$current_transport" == *"host="* ]]; then
+                            transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                            transport_type="WS($transport_detail)"
+                        fi
+                    elif [[ "$current_transport" == *"tls"* ]]; then
+                        transport_type="TLS"
+                        # 提取SNI信息
+                        if [[ "$current_transport" == *"sni="* ]]; then
+                            transport_detail=$(echo "$current_transport" | sed 's/.*sni=\([^;]*\).*/\1/')
+                            transport_type="TLS($transport_detail)"
+                        fi
+                    fi
+                fi
+
+                printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$current_listen" "$current_remote" "$transport_type" "$current_remark"
                 found_rules=true
-
-                # 重置状态
-                in_endpoint=false
-                current_remark=""
+                index=$((index + 1))
             fi
+
+            # 重置状态
+            in_endpoint=false
+            current_remark=""
+            current_transport=""
+            current_listen=""
+            current_remote=""
         fi
     done < "$CONFIG_FILE"
+
+    # 处理文件末尾的最后一个endpoint
+    if [ "$in_endpoint" = true ] && [ -n "$current_listen" ] && [ -n "$current_remote" ]; then
+        # 解析传输类型
+        local transport_type="TCP"
+        local transport_detail=""
+
+        if [ -n "$current_transport" ]; then
+            if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+                transport_type="WSS"
+                # 提取host信息
+                if [[ "$current_transport" == *"host="* ]]; then
+                    transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                    transport_type="WSS($transport_detail)"
+                fi
+            elif [[ "$current_transport" == *"ws"* ]]; then
+                transport_type="WebSocket"
+                # 提取host信息
+                if [[ "$current_transport" == *"host="* ]]; then
+                    transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                    transport_type="WS($transport_detail)"
+                fi
+            elif [[ "$current_transport" == *"tls"* ]]; then
+                transport_type="TLS"
+                # 提取SNI信息
+                if [[ "$current_transport" == *"sni="* ]]; then
+                    transport_detail=$(echo "$current_transport" | sed 's/.*sni=\([^;]*\).*/\1/')
+                    transport_type="TLS($transport_detail)"
+                fi
+            fi
+        fi
+
+        printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$current_listen" "$current_remote" "$transport_type" "$current_remark"
+        found_rules=true
+    fi
 
     if [ "$found_rules" = false ]; then
         echo "暂无转发规则"
     fi
 
-    echo "—————————————————————————————————————————————————————————"
+    echo "—————————————————————————————————————————————————————————————————————————————————"
+    echo ""
+    echo "📖 传输协议说明："
+    echo "  • TCP: 普通TCP直连"
+    echo "  • WS(域名): WebSocket隧道，伪装为指定域名"
+    echo "  • TLS(SNI): TLS加密隧道，使用指定SNI"
+    echo "  • WSS(域名): WebSocket over TLS，加密WebSocket隧道"
     echo ""
 
     read -e -p "按回车键返回..."
@@ -616,8 +873,8 @@ delete_forward() {
 
     echo "当前转发规则："
     echo ""
-    echo "序号 | 监听端口        | 转发地址                     | 备注"
-    echo "—————————————————————————————————————————————————————————"
+    echo "序号 | 监听端口        | 转发地址                     | 传输协议     | 备注"
+    echo "—————————————————————————————————————————————————————————————————————————————————"
 
     while IFS= read -r line; do
         # 检查备注行
@@ -647,7 +904,36 @@ delete_forward() {
                 remarks+=("$current_remark")
                 transports+=("$current_transport")
 
-                printf " %-3s | %-15s | %-28s | %-15s\n" "$index" "$current_listen" "$current_remote" "$current_remark"
+                # 解析传输类型
+                local transport_type="TCP"
+                local transport_detail=""
+
+                if [ -n "$current_transport" ]; then
+                    if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+                        transport_type="WSS"
+                        # 提取host信息
+                        if [[ "$current_transport" == *"host="* ]]; then
+                            transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                            transport_type="WSS($transport_detail)"
+                        fi
+                    elif [[ "$current_transport" == *"ws"* ]]; then
+                        transport_type="WebSocket"
+                        # 提取host信息
+                        if [[ "$current_transport" == *"host="* ]]; then
+                            transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                            transport_type="WS($transport_detail)"
+                        fi
+                    elif [[ "$current_transport" == *"tls"* ]]; then
+                        transport_type="TLS"
+                        # 提取SNI信息
+                        if [[ "$current_transport" == *"sni="* ]]; then
+                            transport_detail=$(echo "$current_transport" | sed 's/.*sni=\([^;]*\).*/\1/')
+                            transport_type="TLS($transport_detail)"
+                        fi
+                    fi
+                fi
+
+                printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$current_listen" "$current_remote" "$transport_type" "$current_remark"
                 index=$((index + 1))
             fi
 
@@ -666,7 +952,37 @@ delete_forward() {
         remote_addrs+=("$current_remote")
         remarks+=("$current_remark")
         transports+=("$current_transport")
-        printf " %-3s | %-15s | %-28s | %-15s\n" "$index" "$current_listen" "$current_remote" "$current_remark"
+
+        # 解析传输类型
+        local transport_type="TCP"
+        local transport_detail=""
+
+        if [ -n "$current_transport" ]; then
+            if [[ "$current_transport" == *"ws"* ]] && [[ "$current_transport" == *"tls"* ]]; then
+                transport_type="WSS"
+                # 提取host信息
+                if [[ "$current_transport" == *"host="* ]]; then
+                    transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                    transport_type="WSS($transport_detail)"
+                fi
+            elif [[ "$current_transport" == *"ws"* ]]; then
+                transport_type="WebSocket"
+                # 提取host信息
+                if [[ "$current_transport" == *"host="* ]]; then
+                    transport_detail=$(echo "$current_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                    transport_type="WS($transport_detail)"
+                fi
+            elif [[ "$current_transport" == *"tls"* ]]; then
+                transport_type="TLS"
+                # 提取SNI信息
+                if [[ "$current_transport" == *"sni="* ]]; then
+                    transport_detail=$(echo "$current_transport" | sed 's/.*sni=\([^;]*\).*/\1/')
+                    transport_type="TLS($transport_detail)"
+                fi
+            fi
+        fi
+
+        printf " %-3s | %-15s | %-28s | %-12s | %-15s\n" "$index" "$current_listen" "$current_remote" "$transport_type" "$current_remark"
     fi
 
     if [ ${#listen_ports[@]} -eq 0 ]; then
@@ -675,7 +991,7 @@ delete_forward() {
         return
     fi
 
-    echo "—————————————————————————————————————————————————————————"
+    echo "—————————————————————————————————————————————————————————————————————————————————"
     echo ""
     read -e -p "请输入要删除的规则编号 (1-${#listen_ports[@]}) 或按回车返回: " choice
 
@@ -696,17 +1012,42 @@ delete_forward() {
     local remote_part="${remote_addrs[$selected_index]}"
     local remark_part="${remarks[$selected_index]}"
 
+    # 解析传输协议信息用于显示
+    local display_transport="TCP (普通直连)"
+    local selected_transport="${transports[$selected_index]}"
+
+    if [ -n "$selected_transport" ]; then
+        if [[ "$selected_transport" == *"ws"* ]] && [[ "$selected_transport" == *"tls"* ]]; then
+            display_transport="WSS (WebSocket over TLS)"
+            # 提取host信息
+            if [[ "$selected_transport" == *"host="* ]]; then
+                local host_info=$(echo "$selected_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                display_transport="WSS (WebSocket over TLS) - 伪装域名: $host_info"
+            fi
+        elif [[ "$selected_transport" == *"ws"* ]]; then
+            display_transport="WebSocket (WS隧道)"
+            # 提取host信息
+            if [[ "$selected_transport" == *"host="* ]]; then
+                local host_info=$(echo "$selected_transport" | sed 's/.*host=\([^;]*\).*/\1/')
+                display_transport="WebSocket (WS隧道) - 伪装域名: $host_info"
+            fi
+        elif [[ "$selected_transport" == *"tls"* ]]; then
+            display_transport="TLS (加密隧道)"
+            # 提取SNI信息
+            if [[ "$selected_transport" == *"sni="* ]]; then
+                local sni_info=$(echo "$selected_transport" | sed 's/.*sni=\([^;]*\).*/\1/')
+                display_transport="TLS (加密隧道) - SNI: $sni_info"
+            fi
+        fi
+    fi
+
     echo ""
     echo "⚠️  确认删除以下规则？"
     echo "—————————————————————————————————————————————————————————"
     echo "   📍 监听端口: $listen_part"
     echo "   🎯 转发地址: $remote_part"
     echo "   📝 备注信息: ${remark_part:-无备注}"
-    if [ -n "${transports[$selected_index]}" ]; then
-        echo "   🌐 传输协议: ${transports[$selected_index]}"
-    else
-        echo "   🌐 传输协议: TCP (默认)"
-    fi
+    echo "   🌐 传输协议: $display_transport"
     echo "—————————————————————————————————————————————————————————"
     echo ""
     echo "⚠️  警告：删除后需要重启服务才能生效！"
@@ -1707,15 +2048,26 @@ configure_wss_client() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (如: example.com，直接IP连接可留空): " http_host
+    # 生成随机伪装域名
+    local random_domain=$(get_random_fake_domain)
+    echo "🎲 随机选择伪装域名: $random_domain"
+    read -e -p "🏠 HTTP Host (直接回车使用随机域名，或输入自定义域名): " http_host
     if [ -z "$http_host" ]; then
-        echo "⚠️  HTTP Host为空，将使用目标服务器地址"
-        http_host="$wss_server"
+        http_host="$random_domain"
+        echo "✅ 使用随机域名: $http_host"
+    else
+        echo "✅ 使用自定义域名: $http_host"
     fi
 
-    read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
+    # 生成随机WebSocket路径
+    local random_ws_path=$(get_random_ws_path)
+    echo "🎲 随机选择WebSocket路径: $random_ws_path"
+    read -e -p "📂 WebSocket路径 (直接回车使用随机路径): " ws_path
     if [ -z "$ws_path" ]; then
-        ws_path="/ws"
+        ws_path="$random_ws_path"
+        echo "✅ 使用随机路径: $ws_path"
+    else
+        echo "✅ 使用自定义路径: $ws_path"
     fi
 
     read -e -p "🏷️  SNI (如: example.com): " sni
@@ -1783,15 +2135,26 @@ configure_wss_server() {
         return
     fi
 
-    read -e -p "🏠 HTTP Host (如: example.com，可留空使用默认值): " http_host
+    # 生成随机伪装域名
+    local random_domain=$(get_random_fake_domain)
+    echo "🎲 随机选择伪装域名: $random_domain"
+    read -e -p "🏠 HTTP Host (直接回车使用随机域名，或输入自定义域名): " http_host
     if [ -z "$http_host" ]; then
-        echo "⚠️  HTTP Host为空，将使用默认值 'localhost'"
-        http_host="localhost"
+        http_host="$random_domain"
+        echo "✅ 使用随机域名: $http_host"
+    else
+        echo "✅ 使用自定义域名: $http_host"
     fi
 
-    read -e -p "📂 WebSocket路径 (如: /ws): " ws_path
+    # 生成随机WebSocket路径
+    local random_ws_path=$(get_random_ws_path)
+    echo "🎲 随机选择WebSocket路径: $random_ws_path"
+    read -e -p "📂 WebSocket路径 (直接回车使用随机路径): " ws_path
     if [ -z "$ws_path" ]; then
-        ws_path="/ws"
+        ws_path="$random_ws_path"
+        echo "✅ 使用随机路径: $ws_path"
+    else
+        echo "✅ 使用自定义路径: $ws_path"
     fi
 
     echo ""
@@ -1911,9 +2274,9 @@ configure_ws_tunnel() {
     echo " [1] 完整隧道配置（A机器+B机器）"
     echo " [2] 仅配置A机器（WS客户端）"
     echo " [3] 仅配置B机器（WS服务端）"
-    echo " [4] 双栈隧道配置（IPv4监听+IPv6转发）"
-    echo " [5] 纯IPv6隧道配置（IPv6监听+IPv6转发）"
-    echo " [6] 反向双栈配置（IPv6监听+IPv4转发）"
+    echo " [4] 双栈WS隧道配置（IPv4监听+IPv6转发）"
+    echo " [5] 纯IPv6 WS隧道配置（IPv6监听+IPv6转发）"
+    echo " [6] 反向双栈WS配置（IPv6监听+IPv4转发）"
     echo " [0] 返回"
     echo ""
     read -e -p "请选择: " config_type
@@ -1991,11 +2354,15 @@ configure_complete_ws_tunnel() {
         ws_port="8080"
     fi
 
-    # 生成伪装域名
-    local fake_domain="www.microsoft.com"
-    read -e -p "🎭 伪装域名 (默认: $fake_domain): " custom_domain
+    # 生成随机伪装域名
+    local fake_domain=$(get_random_fake_domain)
+    echo "🎲 随机选择伪装域名: $fake_domain"
+    read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
     if [ -n "$custom_domain" ]; then
         fake_domain="$custom_domain"
+        echo "✅ 使用自定义域名: $fake_domain"
+    else
+        echo "✅ 使用随机域名: $fake_domain"
     fi
 
     # 添加备注功能
@@ -2062,9 +2429,9 @@ EOF
             # 为每个端口添加WS客户端配置
             local port_count=1
             for port in $listen_ports; do
-                local ws_path="/ws"
+                local ws_path=$(get_random_ws_path)
                 if [ $port_count -gt 1 ]; then
-                    ws_path="/ws$port_count"
+                    ws_path="${ws_path}$port_count"
                 fi
 
                 cat >> "$CONFIG_FILE" << EOF
@@ -2109,7 +2476,7 @@ tcp_nodelay = true
 # 备注: $tunnel_remark - B机器服务端
 listen = "0.0.0.0:$ws_port"
 remote = "$target_format"
-transport = "ws;host=$fake_domain;path=/ws"
+transport = "ws;host=$fake_domain;path=$(get_random_ws_path)"
 
 EOF
 
@@ -2148,11 +2515,12 @@ configure_dual_stack_tunnel() {
     echo "—————————————————————————————————————————————————————————"
     echo ""
 
-    echo "双栈隧道特点："
-    echo "✅ A机器：用户IPv4连接，向B机器IPv6转发"
-    echo "✅ B机器：IPv6监听，向XrayR IPv4转发"
+    echo "双栈WebSocket隧道特点："
+    echo "✅ A机器：用户IPv4连接，通过WebSocket向B机器IPv6转发"
+    echo "✅ B机器：IPv6监听WebSocket，向XrayR转发"
     echo "✅ 适合双栈服务器环境"
     echo "✅ 充分利用IPv6网络优势"
+    echo "✅ WebSocket协议伪装，穿透防火墙"
     echo ""
     echo "—————————————————————————————————————————————————————————"
 
@@ -2208,22 +2576,46 @@ configure_dual_stack_tunnel() {
             listen_ports="35812"
         fi
 
-        read -e -p "🔌 B机器监听端口 (默认与A机器相同): " b_listen_port
+        read -e -p "🔌 B机器WS端口 (默认8080): " b_listen_port
         if [ -z "$b_listen_port" ]; then
-            b_listen_port="$listen_ports"
+            b_listen_port="8080"
+        fi
+
+        # 生成随机伪装域名
+        local fake_domain=$(get_random_fake_domain)
+        echo "🎲 随机选择伪装域名: $fake_domain"
+        read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
+        if [ -n "$custom_domain" ]; then
+            fake_domain="$custom_domain"
+            echo "✅ 使用自定义域名: $fake_domain"
+        else
+            echo "✅ 使用随机域名: $fake_domain"
+        fi
+
+        # 生成随机WebSocket路径
+        local random_ws_path=$(get_random_ws_path)
+        echo "🎲 随机选择WebSocket路径: $random_ws_path"
+        read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
+        if [ -z "$ws_path" ]; then
+            ws_path="$random_ws_path"
+            echo "✅ 使用随机路径: $ws_path"
+        else
+            echo "✅ 使用自定义路径: $ws_path"
         fi
 
         # 添加备注功能
-        read -e -p "📝 备注信息 (可选，如: 双栈转发): " tunnel_remark
+        read -e -p "📝 备注信息 (可选，如: 双栈WS转发): " tunnel_remark
         if [ -z "$tunnel_remark" ]; then
-            tunnel_remark="双栈隧道转发"
+            tunnel_remark="双栈WebSocket隧道转发"
         fi
 
         echo ""
         echo "📋 A机器配置摘要："
         echo "  🌐 B机器IPv6: $b_machine_ipv6"
         echo "  📍 A机器端口: $listen_ports (IPv4监听)"
-        echo "  🔌 B机器端口: $b_listen_port (IPv6监听)"
+        echo "  🔌 B机器WS端口: $b_listen_port"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
         echo "  📝 备注信息: $tunnel_remark"
         echo ""
 
@@ -2243,21 +2635,45 @@ configure_dual_stack_tunnel() {
             return
         fi
 
-        read -e -p "📍 B机器监听端口 (如: 35812): " b_listen_port
+        read -e -p "📍 B机器WS监听端口 (默认8080): " b_listen_port
         if [ -z "$b_listen_port" ]; then
-            b_listen_port="35812"
+            b_listen_port="8080"
+        fi
+
+        # 生成随机伪装域名
+        local fake_domain=$(get_random_fake_domain)
+        echo "🎲 随机选择伪装域名: $fake_domain"
+        read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
+        if [ -n "$custom_domain" ]; then
+            fake_domain="$custom_domain"
+            echo "✅ 使用自定义域名: $fake_domain"
+        else
+            echo "✅ 使用随机域名: $fake_domain"
+        fi
+
+        # 生成随机WebSocket路径
+        local random_ws_path=$(get_random_ws_path)
+        echo "🎲 随机选择WebSocket路径: $random_ws_path"
+        read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
+        if [ -z "$ws_path" ]; then
+            ws_path="$random_ws_path"
+            echo "✅ 使用随机路径: $ws_path"
+        else
+            echo "✅ 使用自定义路径: $ws_path"
         fi
 
         # 添加备注功能
-        read -e -p "📝 备注信息 (可选，如: 双栈转发): " tunnel_remark
+        read -e -p "📝 备注信息 (可选，如: 双栈WS转发): " tunnel_remark
         if [ -z "$tunnel_remark" ]; then
-            tunnel_remark="双栈隧道转发"
+            tunnel_remark="双栈WebSocket隧道转发"
         fi
 
         echo ""
         echo "📋 B机器配置摘要："
         echo "  🎯 XrayR: $xrayr_host:$xrayr_port"
-        echo "  📍 B机器端口: $b_listen_port (IPv6监听)"
+        echo "  📍 B机器WS端口: $b_listen_port"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
         echo "  📝 备注信息: $tunnel_remark"
         echo ""
 
@@ -2322,15 +2738,19 @@ EOF
 # 备注: $tunnel_remark - A机器IPv4监听端口$port
 listen = "0.0.0.0:$port"
 remote = "$b_ipv6_format"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
         done
 
-        echo "✅ A机器双栈配置完成！"
+        echo "✅ A机器双栈WebSocket隧道配置完成！"
         echo ""
         echo "📋 A机器配置摘要："
         echo "  📍 监听端口: $listen_ports (IPv4)"
         echo "  🎯 连接目标: $b_ipv6_format (IPv6)"
-        echo "  🔄 转发模式: IPv4→IPv6"
+        echo "  🌐 传输协议: WebSocket"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
+        echo "  🔄 转发模式: IPv4→IPv6 (WebSocket隧道)"
         echo "  🔐 PROXY Protocol: 发送"
         echo ""
         echo "📝 B机器配置命令："
@@ -2369,21 +2789,33 @@ EOF
             fi
         fi
 
+        # 处理XrayR地址格式
+        local target_format
+        if [[ "$xrayr_host" == *:*:* ]] && [[ "$xrayr_host" != \[*\] ]]; then
+            target_format="[$xrayr_host]:$xrayr_port"
+        else
+            target_format="$xrayr_host:$xrayr_port"
+        fi
+
         # 添加双栈监听配置（IPv6地址自动包含IPv4）
         cat >> "$CONFIG_FILE" << EOF
 
 [[endpoints]]
-# 备注: $tunnel_remark - B机器双栈监听
+# 备注: $tunnel_remark - B机器双栈WebSocket服务端
 listen = "[::]:$b_listen_port"
-remote = "$xrayr_host:$xrayr_port"
+remote = "$target_format"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
 
-        echo "✅ B机器双栈配置完成！"
+        echo "✅ B机器双栈WebSocket隧道配置完成！"
         echo ""
         echo "📋 B机器配置摘要："
         echo "  📍 监听端口: $b_listen_port (IPv4+IPv6双栈)"
-        echo "  🎯 转发目标: $xrayr_host:$xrayr_port (IPv4)"
-        echo "  🔄 转发模式: IPv4/IPv6→IPv4"
+        echo "  🎯 转发目标: $target_format"
+        echo "  🌐 传输协议: WebSocket"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
+        echo "  🔄 转发模式: IPv4/IPv6→目标 (WebSocket隧道)"
         echo "  🔐 PROXY Protocol: 接收+发送"
         echo ""
         echo "🔥 防火墙设置："
@@ -2406,30 +2838,50 @@ configure_pure_ipv6_tunnel() {
     echo "—————————————————————————————————————————————————————————"
     echo ""
 
-    echo "纯IPv6隧道特点："
-    echo "✅ A机器：用户IPv6连接，向B机器IPv6转发"
-    echo "✅ B机器：IPv6监听，向XrayR转发（IPv4或IPv6）"
+    echo "纯IPv6 WebSocket隧道特点："
+    echo "✅ A机器：用户IPv6连接，通过WebSocket向B机器IPv6转发"
+    echo "✅ B机器：IPv6监听WebSocket，向XrayR转发（IPv4或IPv6）"
     echo "✅ 适合纯IPv6环境"
     echo "✅ 充分利用IPv6网络性能"
     echo "✅ 避免IPv4地址不足问题"
+    echo "✅ WebSocket协议伪装，穿透防火墙"
     echo ""
     echo "—————————————————————————————————————————————————————————"
 
+    # 先确认当前机器类型
+    echo "请确认当前机器类型："
+    echo " [1] A机器（国内服务器）"
+    echo " [2] B机器（海外服务器）"
+    echo ""
+    read -e -p "当前机器是: " current_machine
+
+    if [ "$current_machine" != "1" ] && [ "$current_machine" != "2" ]; then
+        echo "❌ 无效选择"
+        read -e -p "按回车键返回..."
+        return
+    fi
+
+    echo ""
     echo "请提供以下信息："
     echo ""
 
-    # 先检测当前机器类型
-    echo "💡 提示：如果您在B机器上运行，可以跳过IPv6地址输入"
-    echo ""
-    read -e -p "🌐 B机器IPv6地址 (B机器可留空自动检测): " b_machine_ipv6
-
-    # 如果为空，尝试自动检测
-    if [ -z "$b_machine_ipv6" ]; then
+    # 根据机器类型获取不同信息
+    local b_machine_ipv6=""
+    if [ "$current_machine" == "1" ]; then
+        # A机器需要输入B机器IPv6地址
+        read -e -p "🌐 B机器IPv6地址: " b_machine_ipv6
+        if [ -z "$b_machine_ipv6" ]; then
+            echo "❌ B机器IPv6地址不能为空"
+            read -e -p "按回车键返回..."
+            return
+        fi
+    else
+        # B机器自动检测本机IPv6地址
         echo "🔍 自动检测本机IPv6地址..."
         b_machine_ipv6=$(ip -6 addr show | grep 'inet6.*global' | head -1 | awk '{print $2}' | cut -d'/' -f1)
         if [ -z "$b_machine_ipv6" ]; then
             echo "⚠️  未检测到IPv6地址，请手动输入："
-            read -e -p "🌐 B机器IPv6地址: " b_machine_ipv6
+            read -e -p "🌐 本机IPv6地址: " b_machine_ipv6
             if [ -z "$b_machine_ipv6" ]; then
                 echo "❌ IPv6地址不能为空"
                 read -e -p "按回车键返回..."
@@ -2440,46 +2892,115 @@ configure_pure_ipv6_tunnel() {
         fi
     fi
 
-    # 获取XrayR信息
-    read -e -p "🎯 XrayR节点地址 (IPv4或IPv6): " xrayr_host
-    if [ -z "$xrayr_host" ]; then
-        echo "❌ XrayR地址不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
+    # 根据机器类型获取不同信息
+    if [ "$current_machine" == "1" ]; then
+        # A机器只需要端口信息
+        read -e -p "📍 A机器监听端口 (如: 35812): " listen_ports
+        if [ -z "$listen_ports" ]; then
+            listen_ports="35812"
+        fi
 
-    read -e -p "🔌 XrayR节点端口: " xrayr_port
-    if [ -z "$xrayr_port" ]; then
-        echo "❌ XrayR端口不能为空"
-        read -e -p "按回车键返回..."
-        return
-    fi
+        read -e -p "🔌 B机器WS端口 (默认8080): " b_listen_port
+        if [ -z "$b_listen_port" ]; then
+            b_listen_port="8080"
+        fi
 
-    # 获取端口配置
-    read -e -p "📍 A机器监听端口 (如: 35812): " listen_ports
-    if [ -z "$listen_ports" ]; then
-        listen_ports="35812"
-    fi
+        # 生成随机伪装域名
+        local fake_domain=$(get_random_fake_domain)
+        echo "🎲 随机选择伪装域名: $fake_domain"
+        read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
+        if [ -n "$custom_domain" ]; then
+            fake_domain="$custom_domain"
+            echo "✅ 使用自定义域名: $fake_domain"
+        else
+            echo "✅ 使用随机域名: $fake_domain"
+        fi
 
-    read -e -p "🔌 B机器监听端口 (默认与A机器相同): " b_listen_port
-    if [ -z "$b_listen_port" ]; then
-        b_listen_port="$listen_ports"
-    fi
+        # 生成随机WebSocket路径
+        local random_ws_path=$(get_random_ws_path)
+        echo "🎲 随机选择WebSocket路径: $random_ws_path"
+        read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
+        if [ -z "$ws_path" ]; then
+            ws_path="$random_ws_path"
+            echo "✅ 使用随机路径: $ws_path"
+        else
+            echo "✅ 使用自定义路径: $ws_path"
+        fi
 
-    # 添加备注功能
-    read -e -p "📝 备注信息 (可选，如: 纯IPv6转发): " tunnel_remark
-    if [ -z "$tunnel_remark" ]; then
-        tunnel_remark="纯IPv6隧道转发"
-    fi
+        # 添加备注功能
+        read -e -p "📝 备注信息 (可选，如: 纯IPv6 WS转发): " tunnel_remark
+        if [ -z "$tunnel_remark" ]; then
+            tunnel_remark="纯IPv6 WebSocket隧道转发"
+        fi
 
-    echo ""
-    echo "📋 配置摘要："
-    echo "  🌐 B机器IPv6: $b_machine_ipv6"
-    echo "  🎯 XrayR: $xrayr_host:$xrayr_port"
-    echo "  📍 A机器端口: $listen_ports (IPv6监听)"
-    echo "  🔌 B机器端口: $b_listen_port (IPv6监听)"
-    echo "  📝 备注信息: $tunnel_remark"
-    echo ""
+        echo ""
+        echo "📋 A机器配置摘要："
+        echo "  🌐 B机器IPv6: $b_machine_ipv6"
+        echo "  📍 A机器端口: $listen_ports (IPv6监听)"
+        echo "  🔌 B机器WS端口: $b_listen_port"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
+        echo "  📝 备注信息: $tunnel_remark"
+        echo ""
+
+    else
+        # B机器需要XrayR信息
+        read -e -p "🎯 XrayR节点地址 (IPv4或IPv6): " xrayr_host
+        if [ -z "$xrayr_host" ]; then
+            echo "❌ XrayR地址不能为空"
+            read -e -p "按回车键返回..."
+            return
+        fi
+
+        read -e -p "🔌 XrayR节点端口: " xrayr_port
+        if [ -z "$xrayr_port" ]; then
+            echo "❌ XrayR端口不能为空"
+            read -e -p "按回车键返回..."
+            return
+        fi
+
+        read -e -p "📍 B机器WS监听端口 (默认8080): " b_listen_port
+        if [ -z "$b_listen_port" ]; then
+            b_listen_port="8080"
+        fi
+
+        # 生成随机伪装域名
+        local fake_domain=$(get_random_fake_domain)
+        echo "🎲 随机选择伪装域名: $fake_domain"
+        read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
+        if [ -n "$custom_domain" ]; then
+            fake_domain="$custom_domain"
+            echo "✅ 使用自定义域名: $fake_domain"
+        else
+            echo "✅ 使用随机域名: $fake_domain"
+        fi
+
+        # 生成随机WebSocket路径
+        local random_ws_path=$(get_random_ws_path)
+        echo "🎲 随机选择WebSocket路径: $random_ws_path"
+        read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
+        if [ -z "$ws_path" ]; then
+            ws_path="$random_ws_path"
+            echo "✅ 使用随机路径: $ws_path"
+        else
+            echo "✅ 使用自定义路径: $ws_path"
+        fi
+
+        # 添加备注功能
+        read -e -p "📝 备注信息 (可选，如: 纯IPv6 WS转发): " tunnel_remark
+        if [ -z "$tunnel_remark" ]; then
+            tunnel_remark="纯IPv6 WebSocket隧道转发"
+        fi
+
+        echo ""
+        echo "📋 B机器配置摘要："
+        echo "  🎯 XrayR: $xrayr_host:$xrayr_port"
+        echo "  📍 B机器WS端口: $b_listen_port"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
+        echo "  📝 备注信息: $tunnel_remark"
+        echo ""
+    fi
 
     read -e -p "确认配置? (Y/n): " confirm
     if [[ "$confirm" =~ ^[Nn]$ ]]; then
@@ -2511,16 +3032,11 @@ configure_pure_ipv6_tunnel() {
     # 备份现有配置
     cp "$CONFIG_FILE" "${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
 
-    # 检测当前机器类型
+    # 生成配置文件
     echo ""
-    echo "请确认当前机器类型："
-    echo " [1] A机器（国内服务器）"
-    echo " [2] B机器（海外服务器）"
-    echo ""
-    read -e -p "当前机器是: " current_machine
+    echo "📝 生成配置文件..."
 
-    case $current_machine in
-        1)
+    if [ "$current_machine" == "1" ]; then
             # A机器配置：IPv6监听，IPv6转发
             # 检查是否已有network配置
             if ! grep -q "^\[network\]" "$CONFIG_FILE" 2>/dev/null; then
@@ -2553,15 +3069,19 @@ EOF
 # 备注: $tunnel_remark - A机器IPv6监听端口$port
 listen = "[::]:$port"
 remote = "$b_ipv6_format"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
             done
 
-            echo "✅ A机器纯IPv6配置完成！"
+            echo "✅ A机器纯IPv6 WebSocket隧道配置完成！"
             echo ""
             echo "📋 A机器配置摘要："
             echo "  📍 监听端口: $listen_ports (IPv6)"
             echo "  🎯 连接目标: $b_ipv6_format (IPv6)"
-            echo "  🔄 转发模式: IPv6→IPv6"
+            echo "  🌐 传输协议: WebSocket"
+            echo "  🎭 伪装域名: $fake_domain"
+            echo "  📂 WebSocket路径: $ws_path"
+            echo "  🔄 转发模式: IPv6→IPv6 (WebSocket隧道)"
             echo "  🔐 PROXY Protocol: 发送"
             echo ""
             echo "🔥 防火墙设置："
@@ -2574,9 +3094,7 @@ EOF
             echo "  XrayR端口: $xrayr_port"
             echo "  监听端口: $b_listen_port"
             echo "  备注信息: $tunnel_remark"
-            ;;
-
-        2)
+    elif [ "$current_machine" == "2" ]; then
             # B机器配置：IPv6监听，转发到XrayR
             # 判断XrayR是否为IPv6
             local ipv6_only_setting="false"
@@ -2618,17 +3136,21 @@ EOF
             cat >> "$CONFIG_FILE" << EOF
 
 [[endpoints]]
-# 备注: $tunnel_remark - B机器双栈监听
+# 备注: $tunnel_remark - B机器双栈WebSocket服务端
 listen = "[::]:$b_listen_port"
 remote = "$xrayr_format"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
 
-            echo "✅ B机器纯IPv6配置完成！"
+            echo "✅ B机器纯IPv6 WebSocket隧道配置完成！"
             echo ""
             echo "📋 B机器配置摘要："
             echo "  📍 监听端口: $b_listen_port (IPv4+IPv6双栈)"
             echo "  🎯 转发目标: $xrayr_format"
-            echo "  🔄 转发模式: IPv4/IPv6→$(if [[ "$xrayr_host" == *:*:* ]]; then echo "IPv6"; else echo "IPv4"; fi)"
+            echo "  🌐 传输协议: WebSocket"
+            echo "  🎭 伪装域名: $fake_domain"
+            echo "  📂 WebSocket路径: $ws_path"
+            echo "  🔄 转发模式: IPv4/IPv6→$(if [[ "$xrayr_host" == *:*:* ]]; then echo "IPv6"; else echo "IPv4"; fi) (WebSocket隧道)"
             echo "  🔐 PROXY Protocol: 接收+发送"
             echo "  🌐 IPv6-only: $ipv6_only_setting"
             echo ""
@@ -2641,14 +3163,11 @@ EOF
             echo "  B机器IPv6: $b_machine_ipv6"
             echo "  监听端口: $listen_ports"
             echo "  备注信息: $tunnel_remark"
-            ;;
-
-        *)
-            echo "❌ 无效选择"
-            read -e -p "按回车键返回..."
-            return
-            ;;
-    esac
+    else
+        echo "❌ 无效选择"
+        read -e -p "按回车键返回..."
+        return
+    fi
 
     restart_service_prompt
 }
@@ -2660,11 +3179,12 @@ configure_reverse_dual_stack_tunnel() {
     echo "—————————————————————————————————————————————————————————"
     echo ""
 
-    echo "反向双栈隧道特点："
-    echo "✅ A机器：用户IPv6连接，向B机器IPv4转发"
-    echo "✅ B机器：IPv4监听，向XrayR转发"
+    echo "反向双栈WebSocket隧道特点："
+    echo "✅ A机器：用户IPv6连接，通过WebSocket向B机器IPv4转发"
+    echo "✅ B机器：IPv4监听WebSocket，向XrayR转发"
     echo "✅ 适合IPv6用户访问IPv4服务器"
     echo "✅ 解决IPv6到IPv4的连接需求"
+    echo "✅ WebSocket协议伪装，穿透防火墙"
     echo ""
     echo "—————————————————————————————————————————————————————————"
 
@@ -2709,22 +3229,46 @@ configure_reverse_dual_stack_tunnel() {
             listen_ports="35812"
         fi
 
-        read -e -p "🔌 B机器监听端口 (默认与A机器相同): " b_listen_port
+        read -e -p "🔌 B机器WS端口 (默认8080): " b_listen_port
         if [ -z "$b_listen_port" ]; then
-            b_listen_port="$listen_ports"
+            b_listen_port="8080"
+        fi
+
+        # 生成随机伪装域名
+        local fake_domain=$(get_random_fake_domain)
+        echo "🎲 随机选择伪装域名: $fake_domain"
+        read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
+        if [ -n "$custom_domain" ]; then
+            fake_domain="$custom_domain"
+            echo "✅ 使用自定义域名: $fake_domain"
+        else
+            echo "✅ 使用随机域名: $fake_domain"
+        fi
+
+        # 生成随机WebSocket路径
+        local random_ws_path=$(get_random_ws_path)
+        echo "🎲 随机选择WebSocket路径: $random_ws_path"
+        read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
+        if [ -z "$ws_path" ]; then
+            ws_path="$random_ws_path"
+            echo "✅ 使用随机路径: $ws_path"
+        else
+            echo "✅ 使用自定义路径: $ws_path"
         fi
 
         # 添加备注功能
-        read -e -p "📝 备注信息 (可选，如: IPv6用户转发): " tunnel_remark
+        read -e -p "📝 备注信息 (可选，如: IPv6用户WS转发): " tunnel_remark
         if [ -z "$tunnel_remark" ]; then
-            tunnel_remark="反向双栈隧道转发"
+            tunnel_remark="反向双栈WebSocket隧道转发"
         fi
 
         echo ""
         echo "📋 A机器配置摘要："
         echo "  🌐 B机器IPv4: $b_machine_ipv4"
         echo "  📍 A机器端口: $listen_ports (IPv6监听)"
-        echo "  🔌 B机器端口: $b_listen_port (IPv4监听)"
+        echo "  🔌 B机器WS端口: $b_listen_port"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
         echo "  📝 备注信息: $tunnel_remark"
         echo ""
 
@@ -2744,21 +3288,45 @@ configure_reverse_dual_stack_tunnel() {
             return
         fi
 
-        read -e -p "📍 B机器监听端口 (如: 35812): " b_listen_port
+        read -e -p "📍 B机器WS监听端口 (默认8080): " b_listen_port
         if [ -z "$b_listen_port" ]; then
-            b_listen_port="35812"
+            b_listen_port="8080"
+        fi
+
+        # 生成随机伪装域名
+        local fake_domain=$(get_random_fake_domain)
+        echo "🎲 随机选择伪装域名: $fake_domain"
+        read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
+        if [ -n "$custom_domain" ]; then
+            fake_domain="$custom_domain"
+            echo "✅ 使用自定义域名: $fake_domain"
+        else
+            echo "✅ 使用随机域名: $fake_domain"
+        fi
+
+        # 生成随机WebSocket路径
+        local random_ws_path=$(get_random_ws_path)
+        echo "🎲 随机选择WebSocket路径: $random_ws_path"
+        read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
+        if [ -z "$ws_path" ]; then
+            ws_path="$random_ws_path"
+            echo "✅ 使用随机路径: $ws_path"
+        else
+            echo "✅ 使用自定义路径: $ws_path"
         fi
 
         # 添加备注功能
-        read -e -p "📝 备注信息 (可选，如: IPv6用户转发): " tunnel_remark
+        read -e -p "📝 备注信息 (可选，如: IPv6用户WS转发): " tunnel_remark
         if [ -z "$tunnel_remark" ]; then
-            tunnel_remark="反向双栈隧道转发"
+            tunnel_remark="反向双栈WebSocket隧道转发"
         fi
 
         echo ""
         echo "📋 B机器配置摘要："
         echo "  🎯 XrayR: $xrayr_host:$xrayr_port"
-        echo "  📍 B机器端口: $b_listen_port (IPv4监听)"
+        echo "  📍 B机器WS端口: $b_listen_port"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
         echo "  📝 备注信息: $tunnel_remark"
         echo ""
 
@@ -2815,15 +3383,19 @@ EOF
 # 备注: $tunnel_remark - A机器IPv6监听端口$port
 listen = "[::]:$port"
 remote = "$b_machine_ipv4:$b_listen_port"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
         done
 
-        echo "✅ A机器反向双栈配置完成！"
+        echo "✅ A机器反向双栈WebSocket隧道配置完成！"
         echo ""
         echo "📋 A机器配置摘要："
         echo "  📍 监听端口: $listen_ports (IPv6)"
         echo "  🎯 连接目标: $b_machine_ipv4:$b_listen_port (IPv4)"
-        echo "  🔄 转发模式: IPv6→IPv4"
+        echo "  🌐 传输协议: WebSocket"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
+        echo "  🔄 转发模式: IPv6→IPv4 (WebSocket隧道)"
         echo "  🔐 PROXY Protocol: 发送"
         echo ""
         echo "🔥 防火墙设置："
@@ -2878,17 +3450,21 @@ EOF
         cat >> "$CONFIG_FILE" << EOF
 
 [[endpoints]]
-# 备注: $tunnel_remark - B机器IPv4监听
+# 备注: $tunnel_remark - B机器IPv4 WebSocket服务端
 listen = "0.0.0.0:$b_listen_port"
 remote = "$xrayr_format"
+transport = "ws;host=$fake_domain;path=$ws_path"
 EOF
 
-        echo "✅ B机器反向双栈配置完成！"
+        echo "✅ B机器反向双栈WebSocket隧道配置完成！"
         echo ""
         echo "📋 B机器配置摘要："
         echo "  📍 监听端口: $b_listen_port (IPv4)"
         echo "  🎯 转发目标: $xrayr_format"
-        echo "  🔄 转发模式: IPv4→$(if [[ "$xrayr_host" == *:*:* ]]; then echo "IPv6"; else echo "IPv4"; fi)"
+        echo "  🌐 传输协议: WebSocket"
+        echo "  🎭 伪装域名: $fake_domain"
+        echo "  📂 WebSocket路径: $ws_path"
+        echo "  🔄 转发模式: IPv4→$(if [[ "$xrayr_host" == *:*:* ]]; then echo "IPv6"; else echo "IPv4"; fi) (WebSocket隧道)"
         echo "  🔐 PROXY Protocol: 接收+发送"
         echo ""
         echo "🔥 防火墙设置："
@@ -2927,15 +3503,26 @@ configure_ws_client_only() {
         local_port="29731"
     fi
 
-    local fake_domain="www.cloudflare.com"
-    read -e -p "🎭 伪装域名 (默认: $fake_domain): " custom_domain
+    # 生成随机伪装域名
+    local fake_domain=$(get_random_fake_domain)
+    echo "🎲 随机选择伪装域名: $fake_domain"
+    read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
     if [ -n "$custom_domain" ]; then
         fake_domain="$custom_domain"
+        echo "✅ 使用自定义域名: $fake_domain"
+    else
+        echo "✅ 使用随机域名: $fake_domain"
     fi
 
-    read -e -p "📂 WebSocket路径 (默认/ws): " ws_path
+    # 生成随机WebSocket路径
+    local random_ws_path=$(get_random_ws_path)
+    echo "🎲 随机选择WebSocket路径: $random_ws_path"
+    read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
     if [ -z "$ws_path" ]; then
-        ws_path="/ws"
+        ws_path="$random_ws_path"
+        echo "✅ 使用随机路径: $ws_path"
+    else
+        echo "✅ 使用自定义路径: $ws_path"
     fi
 
     read -e -p "📝 备注信息 (可选): " ws_remark
@@ -3005,15 +3592,26 @@ configure_ws_server_only() {
         listen_port="8080"
     fi
 
-    local fake_domain="www.cloudflare.com"
-    read -e -p "🎭 伪装域名 (默认: $fake_domain): " custom_domain
+    # 生成随机伪装域名
+    local fake_domain=$(get_random_fake_domain)
+    echo "🎲 随机选择伪装域名: $fake_domain"
+    read -e -p "🎭 使用此域名或输入自定义域名 (直接回车使用随机域名): " custom_domain
     if [ -n "$custom_domain" ]; then
         fake_domain="$custom_domain"
+        echo "✅ 使用自定义域名: $fake_domain"
+    else
+        echo "✅ 使用随机域名: $fake_domain"
     fi
 
-    read -e -p "📂 WebSocket路径 (默认/ws): " ws_path
+    # 生成随机WebSocket路径
+    local random_ws_path=$(get_random_ws_path)
+    echo "🎲 随机选择WebSocket路径: $random_ws_path"
+    read -e -p "📂 使用此路径或输入自定义路径 (直接回车使用随机路径): " ws_path
     if [ -z "$ws_path" ]; then
-        ws_path="/ws"
+        ws_path="$random_ws_path"
+        echo "✅ 使用随机路径: $ws_path"
+    else
+        echo "✅ 使用自定义路径: $ws_path"
     fi
 
     read -e -p "📝 备注信息 (可选): " ws_remark
